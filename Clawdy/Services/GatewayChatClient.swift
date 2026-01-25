@@ -184,20 +184,6 @@ enum GatewayChatEvent: Sendable {
 /// Converts BridgeEventFrame with "chat" event into typed GatewayChatEvent.
 struct GatewayChatEventParser {
 
-    /// Legacy payload structure (deprecated ClawdbotChatEventPayload)
-    private struct LegacyChatEventPayload: Codable {
-        let type: String
-        let sessionKey: String?
-        let runId: String?
-        let text: String?
-        let name: String?
-        let id: String?
-        let result: String?
-        let stopReason: String?
-        let code: String?
-        let message: String?
-    }
-
     /// Agent event payload
     private struct AgentEventPayload: Codable {
         let status: String?
@@ -215,50 +201,12 @@ struct GatewayChatEventParser {
 
         switch frame.event {
         case "chat":
-            return parseChatEvent(data)
+            return parseStateChatEvent(data)
         case "agent":
             return parseAgentEvent(data)
         default:
             return nil
         }
-    }
-
-    private func parseChatEvent(_ data: Data) -> GatewayChatEvent? {
-        if let legacy = try? decoder.decode(LegacyChatEventPayload.self, from: data),
-           !legacy.type.isEmpty {
-            switch legacy.type {
-            case "textDelta":
-                guard let text = legacy.text else { return nil }
-                return .textDelta(text: text, seq: nil)
-
-            case "thinkingDelta":
-                guard let text = legacy.text else { return nil }
-                return .thinkingDelta(text: text, seq: nil)
-
-            case "toolCallStart":
-                guard let name = legacy.name else { return nil }
-                return .toolCallStart(name: name, id: legacy.id)
-
-            case "toolCallEnd":
-                guard let name = legacy.name else { return nil }
-                return .toolCallEnd(name: name, id: legacy.id, result: legacy.result)
-
-            case "done":
-                return .done(runId: legacy.runId, stopReason: legacy.stopReason, finalText: nil, seq: nil)
-
-            case "error":
-                return .error(
-                    code: legacy.code ?? "UNKNOWN",
-                    message: legacy.message ?? "Unknown error",
-                    seq: nil
-                )
-
-            default:
-                break
-            }
-        }
-
-        return parseStateChatEvent(data)
     }
 
     private func parseStateChatEvent(_ data: Data) -> GatewayChatEvent? {
