@@ -968,12 +968,17 @@ actor KokoroTTSManager {
     func stopPlayback() {
         playerNode?.stop()
         audioEngine?.stop()
-        
-        // Reset audio engine to free resources
+
+        // Reset and release audio engine to fully release the audio session
         if let engine = audioEngine {
             engine.reset()
         }
-        
+        audioEngine = nil
+        playerNode = nil
+
+        // Deactivate audio session
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
         // Clear GPU cache to free any lingering MLX memory
         MLX.Memory.clearCache()
     }

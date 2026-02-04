@@ -36,6 +36,8 @@ class SpeechRecognizer: ObservableObject {
     private var silenceTimer: Timer?
     private var lastTranscriptionTime: Date?
     var onSilenceDetected: (() -> Void)?
+    var onRecognitionStopped: (() -> Void)? // called when recognition ends unexpectedly (error or isFinal)
+    private var isDeliberatelyStopping = false // suppress onRecognitionStopped during deliberate stops
     var silenceThreshold: TimeInterval = 1.5 // seconds of silence before auto-send
 
     // 1-minute timeout handling (Apple's limit per recognition task)
@@ -58,6 +60,8 @@ class SpeechRecognizer: ObservableObject {
     }
 
     func startRecording() async throws {
+        isDeliberatelyStopping = false
+
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
             throw SpeechRecognizerError.notAvailable
         }
@@ -110,11 +114,16 @@ class SpeechRecognizer: ObservableObject {
             if error != nil || result?.isFinal == true {
                 self.audioEngine.stop()
                 self.audioEngine.inputNode.removeTap(onBus: 0)
+                DispatchQueue.main.async {
+                    guard !self.isDeliberatelyStopping else { return }
+                    self.onRecognitionStopped?()
+                }
             }
         }
 
         // Configure audio input
         let inputNode = audioEngine.inputNode
+        inputNode.removeTap(onBus: 0) // Remove any existing tap to avoid duplicate tap crash
         let recordingFormat = inputNode.outputFormat(forBus: 0)
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
@@ -152,7 +161,8 @@ class SpeechRecognizer: ObservableObject {
         // Save current transcription
         let currentText = transcribedText
 
-        // Stop current recognition
+        // Stop current recognition (deliberate - don't trigger onRecognitionStopped)
+        isDeliberatelyStopping = true
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
@@ -170,10 +180,12 @@ class SpeechRecognizer: ObservableObject {
     }
 
     func stopRecording() -> String {
+        isDeliberatelyStopping = true
         stopSilenceTimer()
         stopTimeoutTimer()
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine.reset()
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
 
@@ -182,7 +194,7 @@ class SpeechRecognizer: ObservableObject {
         recognitionStartTime = nil
 
         // Deactivate audio session
-        try? AVAudioSession.sharedInstance().setActive(false)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
         return transcribedText
     }

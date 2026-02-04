@@ -268,6 +268,7 @@ class ClawdyViewModel: ObservableObject {
         didSet {
             UserDefaults.standard.set(isContinuousMode, forKey: "com.clawdy.continuousMode")
             UIApplication.shared.isIdleTimerDisabled = isContinuousMode
+            print("[ContinuousMode] didSet: isContinuousMode=\(isContinuousMode), isIdleTimerDisabled=\(UIApplication.shared.isIdleTimerDisabled)")
         }
     }
     @Published var connectionStatus: ConnectionStatus = .disconnected(reason: "Not connected") {
@@ -423,13 +424,22 @@ class ClawdyViewModel: ObservableObject {
         speechRecognizer.onTimeoutRestart = { [weak self] in
             guard let self = self, self.isContinuousMode else { return }
             print("[ContinuousMode] Recognition timeout - restarting")
+            self.isRecording = false
+            self.restartRecordingWithRecovery()
+        }
+
+        // Set up callback for when recognition stops unexpectedly (error or isFinal)
+        speechRecognizer.onRecognitionStopped = { [weak self] in
+            guard let self = self, self.isContinuousMode else { return }
+            print("[ContinuousMode] Recognition stopped unexpectedly - restarting")
+            self.isRecording = false
             self.restartRecordingWithRecovery()
         }
     }
 
     /// Restart recording with error recovery and exponential backoff
     private func restartRecordingWithRecovery(retryCount: Int = 0) {
-        let maxRetries = 3
+        let maxRetries = 5
         let baseDelay: TimeInterval = 0.3
 
         guard retryCount < maxRetries else {
@@ -440,11 +450,22 @@ class ClawdyViewModel: ObservableObject {
 
         let delay = baseDelay * pow(2.0, Double(retryCount))
 
+        print("[ContinuousMode] restartRecordingWithRecovery attempt \(retryCount + 1)/\(maxRetries), delay: \(delay)s")
+
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self = self else { return }
-            guard self.isContinuousMode else { return }
-            guard !self.isRecording else { return }
-            guard !self.isSpeaking else { return }
+            guard self.isContinuousMode else {
+                print("[ContinuousMode] Recovery aborted: continuous mode disabled")
+                return
+            }
+            guard !self.isRecording else {
+                print("[ContinuousMode] Recovery aborted: already recording")
+                return
+            }
+            guard !self.isSpeaking else {
+                print("[ContinuousMode] Recovery deferred: still speaking, will restart when TTS finishes")
+                return
+            }
 
             Task {
                 do {
@@ -697,6 +718,9 @@ class ClawdyViewModel: ObservableObject {
     /// Toggle continuous conversation mode
     func toggleContinuousMode() {
         isContinuousMode.toggle()
+        // Explicitly set idle timer (didSet on @Published can be unreliable)
+        UIApplication.shared.isIdleTimerDisabled = isContinuousMode
+        print("[ContinuousMode] toggled to \(isContinuousMode), isIdleTimerDisabled = \(UIApplication.shared.isIdleTimerDisabled)")
 
         if isContinuousMode {
             // Start recording if not already recording or speaking
@@ -709,6 +733,20 @@ class ClawdyViewModel: ObservableObject {
                 isRecording = false
                 _ = speechRecognizer.stopRecording()
             }
+
+            // Stop any ongoing TTS
+            incrementalTTS.stop()
+
+            // Switch to .ambient category (allows auto-lock) and deactivate.
+            // This overrides .record/.playback categories that prevent screen lock
+            // (AVSpeechSynthesizer has a known bug where it never deactivates the session)
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.ambient)
+                try session.setActive(false, options: .notifyOthersOnDeactivation)
+            } catch {
+                print("[ContinuousMode] Audio session cleanup error: \(error)")
+            }
         }
     }
 
@@ -717,7 +755,10 @@ class ClawdyViewModel: ObservableObject {
 
     /// Restart recording after TTS finishes in continuous mode
     private func restartRecordingForContinuousMode() {
-        guard !isRestartingContinuousMode else { return }
+        guard !isRestartingContinuousMode else {
+            print("[ContinuousMode] restartRecordingForContinuousMode: already restarting, skipping")
+            return
+        }
         isRestartingContinuousMode = true
 
         // Longer delay to ensure audio session is fully released by TTS
@@ -725,21 +766,25 @@ class ClawdyViewModel: ObservableObject {
             guard let self = self else { return }
             self.isRestartingContinuousMode = false
 
-            guard self.isContinuousMode else { return }
-            guard !self.isRecording else { return }
-            guard !self.isSpeaking else { return }
+            guard self.isContinuousMode else {
+                print("[ContinuousMode] restartRecordingForContinuousMode: continuous mode disabled, aborting")
+                return
+            }
+            guard !self.isRecording else {
+                print("[ContinuousMode] restartRecordingForContinuousMode: already recording, skipping")
+                return
+            }
+            guard !self.isSpeaking else {
+                print("[ContinuousMode] restartRecordingForContinuousMode: still speaking, will retry when TTS finishes")
+                return
+            }
             guard !self.processingState.isActive else {
-                // Still processing, wait and try again
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    if self.isContinuousMode && !self.isRecording && !self.isSpeaking && !self.processingState.isActive {
-                        self.restartRecordingForContinuousMode()
-                    }
-                }
+                print("[ContinuousMode] restartRecordingForContinuousMode: still processing, will retry when processing finishes")
                 return
             }
 
-            print("[ContinuousMode] Restarting recording")
-            self.startRecording()
+            print("[ContinuousMode] Restarting recording via recovery")
+            self.restartRecordingWithRecovery()
         }
     }
 
