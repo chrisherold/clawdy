@@ -196,8 +196,24 @@ class GatewayDualConnectionManager: ObservableObject {
     /// Callback for parsed chat/agent events from the gateway
     var onChatEvent: (@Sendable (GatewayChatEvent) -> Void)?
     
-    /// Session key for chat events
-    var chatSessionKey: String = "agent:main:main"
+    /// Session key for chat events (always stored in canonical `agent:<id>:<key>` form)
+    var chatSessionKey: String = "agent:main:main" {
+        didSet {
+            // Canonicalize: if the user sets a bare key like "main", expand to "agent:main:main"
+            let trimmed = chatSessionKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            let canonical: String
+            if trimmed.isEmpty || trimmed == "main" {
+                canonical = "agent:main:main"
+            } else if trimmed.hasPrefix("agent:") {
+                canonical = trimmed
+            } else {
+                canonical = "agent:main:\(trimmed)"
+            }
+            if chatSessionKey != canonical {
+                chatSessionKey = canonical
+            }
+        }
+    }
     
     /// Callback for when app returns to foreground while still connected
     var onDidBecomeActiveWhileConnected: (() -> Void)?
