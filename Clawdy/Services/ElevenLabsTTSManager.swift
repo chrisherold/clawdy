@@ -1,9 +1,11 @@
 import Foundation
 import AVFoundation
+import OSLog
 
 /// ElevenLabs TTS Manager for high-quality cloud-based text-to-speech
 actor ElevenLabsTTSManager {
     static let shared = ElevenLabsTTSManager()
+    private let logger = Logger(subsystem: "com.clawdy", category: "elevenlabs-tts")
 
     private let keychainKey = "com.clawdy.elevenLabsApiKey"
     private var audioPlayer: AVAudioPlayer?
@@ -132,7 +134,7 @@ actor ElevenLabsTTSManager {
 
     /// Play audio data
     private func playAudioData(_ data: Data) async throws {
-        print("[ElevenLabs] Playing audio data: \(data.count) bytes")
+        logger.debug("Playing audio data: \(data.count) bytes")
 
         return try await withCheckedThrowingContinuation { continuation in
             do {
@@ -146,11 +148,11 @@ actor ElevenLabsTTSManager {
                 let player = try AVAudioPlayer(data: data)
                 self.audioPlayer = player
 
-                print("[ElevenLabs] Audio duration: \(player.duration) seconds")
+                logger.debug("Audio duration: \(player.duration) seconds")
 
                 // Set up completion handler using a delegate wrapper
-                let delegate = AudioPlayerDelegate {
-                    print("[ElevenLabs] Playback finished via delegate")
+                let delegate = AudioPlayerDelegate { [self] in
+                    logger.debug("Playback finished via delegate")
                     continuation.resume()
                 }
                 player.delegate = delegate
@@ -159,9 +161,9 @@ actor ElevenLabsTTSManager {
                 objc_setAssociatedObject(player, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
 
                 player.play()
-                print("[ElevenLabs] Started playback")
+                logger.debug("Started playback")
             } catch {
-                print("[ElevenLabs] Playback error: \(error)")
+                logger.error("Playback error: \(error.localizedDescription)")
                 continuation.resume(throwing: error)
             }
         }

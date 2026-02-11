@@ -1,5 +1,8 @@
 import SwiftUI
+import OSLog
 import UIKit
+
+private let appLogger = Logger(subsystem: "com.clawdy", category: "app")
 
 @main
 struct ClawdyApp: App {
@@ -116,7 +119,7 @@ struct ClawdyApp: App {
             let success = await manager.warmUp(runInference: true)
             
             if success {
-                print("[ClawdyApp] Kokoro TTS warmed up (model loaded, inference deferred)")
+                appLogger.info("Kokoro TTS warmed up (model loaded, inference deferred)")
             }
         }
     }
@@ -162,7 +165,7 @@ final class MemoryWarningObserver {
         }
         lastWarningTime = now
         
-        print("[MemoryWarningObserver] Received memory warning #\(warningCount) from system")
+        appLogger.warning("Received memory warning #\(self.warningCount) from system")
         
         // Handle memory warning in KokoroTTSManager
         // On repeated warnings, force unload even if generating (rare edge case)
@@ -174,7 +177,7 @@ final class MemoryWarningObserver {
             // Images are session-only, so users can re-attach if needed.
             let imageCount = ImageAttachmentStore.shared.count
             if imageCount > 0 {
-                print("[MemoryWarningObserver] Clearing \(imageCount) image attachments due to memory pressure")
+                appLogger.warning("Clearing \(imageCount) image attachments due to memory pressure")
                 ImageAttachmentStore.shared.clearAll()
             }
         }
@@ -182,7 +185,7 @@ final class MemoryWarningObserver {
         Task {
             if forceUnload {
                 // Critical memory pressure - force unload regardless of state
-                print("[MemoryWarningObserver] Critical memory pressure - force unloading Kokoro")
+                appLogger.warning("Critical memory pressure - force unloading Kokoro")
                 await KokoroTTSManager.shared.unloadEngine()
             } else {
                 await KokoroTTSManager.shared.handleMemoryWarning(unloadIfIdle: true)

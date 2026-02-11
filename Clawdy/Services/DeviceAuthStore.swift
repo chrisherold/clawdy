@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Security
 
 /// Represents a stored device authentication token.
@@ -26,6 +27,7 @@ public struct DeviceAuthEntry: Codable, Sendable {
 /// - On reconnect, load the token to include in connect params
 /// - If token is rejected (expired/revoked), clear it and re-pair
 public enum DeviceAuthStore {
+    private static let logger = Logger(subsystem: "com.clawdy", category: "device-auth")
     private static let keychainService = "com.clawdy.device-auth"
     
     // MARK: - Public API
@@ -95,12 +97,12 @@ public enum DeviceAuthStore {
     
     private static func save(entry: DeviceAuthEntry, deviceId: String) -> Bool {
         guard let data = try? JSONEncoder().encode(entry) else {
-            print("[DeviceAuthStore] Failed to encode entry")
+            logger.error("Failed to encode entry")
             return false
         }
         
         let account = keychainAccount(deviceId: deviceId, role: entry.role)
-        print("[DeviceAuthStore] Saving token: account=\(account), deviceId=\(deviceId.prefix(8))..., role=\(entry.role)")
+        logger.debug("Saving token: account=\(account, privacy: .public), deviceId=\(deviceId.prefix(8), privacy: .public)..., role=\(entry.role, privacy: .public)")
         
         // Delete any existing item first
         let deleteQuery: [String: Any] = [
@@ -122,16 +124,16 @@ public enum DeviceAuthStore {
         
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         if status != errSecSuccess {
-            print("[DeviceAuthStore] Failed to save token: \(status)")
+            logger.error("Failed to save token: \(status)")
             return false
         }
-        print("[DeviceAuthStore] Token saved successfully for account=\(account)")
+        logger.debug("Token saved successfully for account=\(account, privacy: .public)")
         return true
     }
     
     private static func load(deviceId: String, role: String) -> DeviceAuthEntry? {
         let account = keychainAccount(deviceId: deviceId, role: role)
-        print("[DeviceAuthStore] Loading token: account=\(account), deviceId=\(deviceId.prefix(8))..., role=\(role)")
+        logger.debug("Loading token: account=\(account, privacy: .public), deviceId=\(deviceId.prefix(8), privacy: .public)..., role=\(role, privacy: .public)")
         
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -147,9 +149,9 @@ public enum DeviceAuthStore {
         guard status == errSecSuccess,
               let data = result as? Data else {
             if status == errSecItemNotFound {
-                print("[DeviceAuthStore] No token found for account=\(account)")
+                logger.debug("No token found for account=\(account, privacy: .public)")
             } else {
-                print("[DeviceAuthStore] Keychain query failed: \(status)")
+                logger.error("Keychain query failed: \(status)")
             }
             return nil
         }
@@ -158,13 +160,13 @@ public enum DeviceAuthStore {
             let entry = try JSONDecoder().decode(DeviceAuthEntry.self, from: data)
             // Validate token is not empty
             guard !entry.token.isEmpty else {
-                print("[DeviceAuthStore] Token is empty for account=\(account)")
+                logger.warning("Token is empty for account=\(account, privacy: .public)")
                 return nil
             }
-            print("[DeviceAuthStore] Token loaded successfully for account=\(account)")
+            logger.debug("Token loaded successfully for account=\(account, privacy: .public)")
             return entry
         } catch {
-            print("[DeviceAuthStore] Failed to decode entry: \(error)")
+            logger.error("Failed to decode entry: \(error.localizedDescription)")
             return nil
         }
     }
@@ -180,7 +182,7 @@ public enum DeviceAuthStore {
         
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecSuccess && status != errSecItemNotFound {
-            print("[DeviceAuthStore] Failed to delete token: \(status)")
+            logger.error("Failed to delete token: \(status)")
         }
     }
 }

@@ -1,6 +1,9 @@
 import Foundation
+import OSLog
 import UIKit
 import ImageIO
+
+private let imageLogger = Logger(subsystem: "com.clawdy", category: "image-attachment")
 
 /// Represents an image attached to a message.
 /// Images are stored as temp files and are session-only (not persisted across app launches).
@@ -93,7 +96,7 @@ struct ImageAttachment: Identifiable, Equatable {
             let originalData = try Data(contentsOf: tempFileURL)
             
             guard let image = UIImage(data: originalData) else {
-                print("[ImageAttachment] ❌ Failed to create UIImage from data")
+                imageLogger.error("Failed to create UIImage from data")
                 return originalData
             }
             
@@ -134,7 +137,7 @@ struct ImageAttachment: Identifiable, Equatable {
             return nil
         }
         let base64 = data.base64EncodedString()
-        print("[ImageAttachment] Encoded: \(data.count) bytes -> \(base64.count) base64 chars")
+        imageLogger.debug("Encoded: \(data.count) bytes -> \(base64.count) base64 chars")
         return base64
     }
     
@@ -217,7 +220,7 @@ struct ImageAttachment: Identifiable, Equatable {
                 dimensions: dimensions
             )
         } catch {
-            print("[ImageAttachment] Failed to save thumbnail: \(error)")
+            imageLogger.error("Failed to save thumbnail: \(error.localizedDescription)")
             return self
         }
     }

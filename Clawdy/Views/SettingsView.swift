@@ -1,6 +1,9 @@
 import SwiftUI
 import AVFoundation
 import Combine
+import OSLog
+
+private let settingsLogger = Logger(subsystem: "com.clawdy", category: "settings")
 
 /// Settings screen for configuring gateway connection and voice preferences.
 /// Stores credentials securely in iOS Keychain.
@@ -375,7 +378,7 @@ struct SettingsView: View {
                     voiceId: voiceId
                 )
             } catch {
-                print("[TestVoice] ElevenLabs error: \(error)")
+                settingsLogger.error("TestVoice ElevenLabs error: \(error.localizedDescription)")
             }
         }
     }
@@ -395,13 +398,13 @@ struct SettingsView: View {
         if let identifier = voiceSettings.settings.voiceIdentifier,
            let voice = AVSpeechSynthesisVoice(identifier: identifier) {
             utterance.voice = voice
-            print("[TestVoice] Using voice: \(voice.name), quality: \(voice.quality.rawValue)")
+            settingsLogger.debug("TestVoice using voice: \(voice.name, privacy: .public), quality: \(voice.quality.rawValue, privacy: .public)")
         } else if let voice = SpeechSynthesizer.findBestVoice() {
             utterance.voice = voice
-            print("[TestVoice] Using auto-selected voice: \(voice.name), quality: \(voice.quality.rawValue)")
+            settingsLogger.debug("TestVoice using auto-selected voice: \(voice.name, privacy: .public), quality: \(voice.quality.rawValue, privacy: .public)")
         } else {
             utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-            print("[TestVoice] Using fallback en-US voice")
+            settingsLogger.debug("TestVoice using fallback en-US voice")
         }
 
         // Match the settings used in IncrementalTTSManager
@@ -414,7 +417,7 @@ struct SettingsView: View {
             try audioSession.setCategory(.playback, mode: .voicePrompt)
             try audioSession.setActive(true)
         } catch {
-            print("[TestVoice] Audio session error: \(error)")
+            settingsLogger.error("TestVoice audio session error: \(error.localizedDescription)")
         }
 
         synthesizer.speak(utterance)
@@ -429,7 +432,7 @@ struct SettingsView: View {
                     speed: voiceSettings.settings.speechRate
                 )
             } catch {
-                print("[TestVoice] Kokoro error: \(error)")
+                settingsLogger.error("TestVoice Kokoro error: \(error.localizedDescription)")
             }
         }
     }
@@ -538,7 +541,7 @@ struct VoiceSelectionView: View {
     private func selectVoice(_ voice: VoiceOption) {
         voiceSettings.settings.voiceIdentifier = voice.id
         voiceSettings.settings.voiceDisplayName = voice.name
-        print("[VoiceSelection] Selected voice: \(voice.name), id: \(voice.id), quality: \(voice.quality.rawValue)")
+        settingsLogger.info("Selected voice: \(voice.name, privacy: .public), id: \(voice.id, privacy: .public), quality: \(voice.quality.rawValue, privacy: .public)")
     }
 }
 
@@ -892,7 +895,7 @@ struct KokoroVoiceSelectionView: View {
             await kokoroTTS.setVoice(voice)
         }
         
-        print("[KokoroVoiceSelection] Selected voice: \(voice.name), id: \(voice.id)")
+        settingsLogger.info("Selected Kokoro voice: \(voice.name, privacy: .public), id: \(voice.id, privacy: .public)")
     }
 }
 
@@ -957,7 +960,7 @@ struct KokoroVoiceRow: View {
             do {
                 try await kokoroTTS.previewVoice(voice, speed: speechRate)
             } catch {
-                print("[KokoroVoiceRow] Preview error: \(error)")
+                settingsLogger.error("Kokoro voice preview error: \(error.localizedDescription)")
             }
             isPreviewing = false
         }
@@ -1295,7 +1298,7 @@ class SettingsViewModel: ObservableObject {
     func clearTokenForRole(_ role: String) {
         let identity = DeviceIdentityStore.loadOrCreate()
         DeviceAuthStore.clearToken(deviceId: identity.deviceId, role: role)
-        print("[Settings] Cleared token for role: \(role)")
+        settingsLogger.info("Cleared token for role: \(role, privacy: .public)")
         checkPairingStatus()
     }
 
@@ -1332,9 +1335,9 @@ class SettingsViewModel: ObservableObject {
 
         do {
             try keychain.saveGatewayCredentials(gatewayCredentials)
-            print("[Settings] Gateway credentials saved successfully (session: \(normalizedSessionKey))")
+            settingsLogger.info("Gateway credentials saved successfully (session: \(normalizedSessionKey, privacy: .public))")
         } catch {
-            print("[Settings] Failed to save Gateway credentials: \(error)")
+            settingsLogger.error("Failed to save Gateway credentials: \(error.localizedDescription)")
         }
     }
 
@@ -1385,11 +1388,11 @@ class SettingsViewModel: ObservableObject {
         
         // Clear device tokens for this device
         DeviceAuthStore.clearAllTokens(deviceId: deviceId)
-        print("[Settings] Cleared device tokens for deviceId: \(deviceId)")
+        settingsLogger.info("Cleared device tokens for deviceId: \(deviceId.prefix(8), privacy: .public)...")
         
         // Clear device identity (forces new keypair generation on next app launch)
         DeviceIdentityStore.clear()
-        print("[Settings] Cleared device identity")
+        settingsLogger.info("Cleared device identity")
         
         keychainCleared = true
     }

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Client for chat operations via the Clawdbot gateway.
 /// 
@@ -10,6 +11,7 @@ import Foundation
 /// This class provides a stable API for the ViewModel while the underlying transport
 /// uses dual WebSocket connections for role separation.
 actor GatewayChatClient {
+    private let logger = Logger(subsystem: "com.clawdy", category: "chat-client")
 
     // MARK: - Types
 
@@ -95,7 +97,7 @@ actor GatewayChatClient {
     /// This method is kept for API compatibility.
     func subscribe() async throws {
         // WebSocket handles subscription automatically
-        print("[GatewayChatClient] subscribe() called - WebSocket handles this automatically")
+        logger.debug("subscribe() called - WebSocket handles this automatically")
     }
 
     /// Check if currently subscribed to chat events (has chat capability via operator connection)
@@ -120,7 +122,7 @@ actor GatewayChatClient {
         currentRunId = nil // Clear run ID since it's session-specific
         
         // Session key changes require reconfiguration
-        print("[GatewayChatClient] Session key changed to '\(key)' - reconnect may be required")
+        logger.info("Session key changed to '\(key, privacy: .public)' - reconnect may be required")
         
         await MainActor.run {
             connectionManager.chatSessionKey = key
@@ -137,7 +139,7 @@ actor GatewayChatClient {
     /// Convert ImageAttachment to AttachmentPayload (kept for reference)
     private func imageToAttachment(_ image: ImageAttachment) -> AttachmentPayload? {
         guard let base64 = image.toBase64() else {
-            print("[GatewayChatClient] Failed to encode image \(image.id) to base64")
+            logger.warning("Failed to encode image \(image.id, privacy: .public) to base64")
             return nil
         }
 

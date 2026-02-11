@@ -1,11 +1,13 @@
 import Foundation
 import AVFoundation
+import OSLog
 
 /// Speech synthesizer for text-to-speech output using AVSpeechSynthesizer.
 /// Provides Siri-like voice output for Claude's responses.
 /// Uses VoiceSettingsManager for configurable speech rate and voice selection.
 @MainActor
 class SpeechSynthesizer: NSObject, ObservableObject {
+    private static let logger = Logger(subsystem: "com.clawdy", category: "speech-synth")
     @Published var isSpeaking = false
 
     private let synthesizer = AVSpeechSynthesizer()
@@ -107,7 +109,7 @@ class SpeechSynthesizer: NSObject, ObservableObject {
         // Priority 1: Premium quality voices (best quality, most natural)
         // These are the newest Siri-quality voices
         if let premiumVoice = englishVoices.first(where: { $0.quality == .premium }) {
-            print("[SpeechSynthesizer] Using premium voice: \(premiumVoice.name) (\(premiumVoice.identifier))")
+            Self.logger.debug("Using premium voice: \(premiumVoice.name, privacy: .public) (\(premiumVoice.identifier, privacy: .public))")
             return premiumVoice
         }
         
@@ -123,20 +125,19 @@ class SpeechSynthesizer: NSObject, ObservableObject {
         
         for identifier in preferredEnhanced {
             if let voice = AVSpeechSynthesisVoice(identifier: identifier) {
-                print("[SpeechSynthesizer] Using preferred enhanced voice: \(voice.name)")
+                Self.logger.debug("Using preferred enhanced voice: \(voice.name, privacy: .public)")
                 return voice
             }
         }
         
         // Any enhanced voice
         if let enhancedVoice = englishVoices.first(where: { $0.quality == .enhanced }) {
-            print("[SpeechSynthesizer] Using enhanced voice: \(enhancedVoice.name)")
+            Self.logger.debug("Using enhanced voice: \(enhancedVoice.name, privacy: .public)")
             return enhancedVoice
         }
         
         // Priority 3: Default quality (robotic, last resort)
-        print("[SpeechSynthesizer] Warning: No premium/enhanced voices available. Using default voice.")
-        print("[SpeechSynthesizer] Tip: Download better voices in Settings > Accessibility > Spoken Content > Voices")
+        Self.logger.warning("No premium/enhanced voices available. Using default voice. Tip: Download better voices in Settings > Accessibility > Spoken Content > Voices")
         return AVSpeechSynthesisVoice(language: "en-US")
     }
     
@@ -145,7 +146,7 @@ class SpeechSynthesizer: NSObject, ObservableObject {
         let voices = AVSpeechSynthesisVoice.speechVoices()
         let englishVoices = voices.filter { $0.language.starts(with: "en") }
         
-        print("[SpeechSynthesizer] Available English voices:")
+        Self.logger.info("Available English voices:")
         for voice in englishVoices.sorted(by: { $0.quality.rawValue > $1.quality.rawValue }) {
             let qualityStr: String
             switch voice.quality {
@@ -153,7 +154,7 @@ class SpeechSynthesizer: NSObject, ObservableObject {
             case .enhanced: qualityStr = "✓ Enhanced"
             default: qualityStr = "○ Default"
             }
-            print("  \(qualityStr) - \(voice.name) [\(voice.language)] id: \(voice.identifier)")
+            Self.logger.info("  \(qualityStr, privacy: .public) - \(voice.name, privacy: .public) [\(voice.language, privacy: .public)] id: \(voice.identifier, privacy: .public)")
         }
     }
 
@@ -171,7 +172,7 @@ class SpeechSynthesizer: NSObject, ObservableObject {
             )
             try audioSession.setActive(true)
         } catch {
-            print("[SpeechSynthesizer] Audio session error: \(error)")
+            Self.logger.error("Audio session error: \(error.localizedDescription)")
         }
     }
 
@@ -180,7 +181,7 @@ class SpeechSynthesizer: NSObject, ObservableObject {
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         } catch {
-            print("[SpeechSynthesizer] Audio session deactivation error: \(error)")
+            Self.logger.warning("Audio session deactivation error: \(error.localizedDescription)")
         }
     }
 

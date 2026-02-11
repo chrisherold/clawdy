@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import OSLog
 
 /// Protocol defining the interface for text-to-speech providers.
 /// Both system TTS (AVSpeechSynthesizer) and Kokoro TTS implement this protocol.
@@ -26,6 +27,7 @@ protocol TTSProvider {
 /// Integrates with IncrementalTTSManager pattern for streaming responses.
 @MainActor
 class UnifiedTTSManager: ObservableObject {
+    private let logger = Logger(subsystem: "com.clawdy", category: "unified-tts")
     
     // MARK: - Singleton
     
@@ -94,7 +96,7 @@ class UnifiedTTSManager: ObservableObject {
                 try await speakWithKokoro(text)
             } catch {
                 // Fall back to system TTS
-                print("[UnifiedTTSManager] Kokoro failed, falling back to system TTS: \(error.localizedDescription)")
+                logger.warning("Kokoro failed, falling back to system TTS: \(error.localizedDescription)")
                 lastError = "Kokoro unavailable, using system TTS"
                 try await speakWithSystem(text)
             }
@@ -215,7 +217,7 @@ class UnifiedTTSManager: ObservableObject {
             )
             try audioSession.setActive(true)
         } catch {
-            print("[UnifiedTTSManager] Audio session error: \(error)")
+            logger.error("Audio session error: \(error.localizedDescription)")
         }
     }
     
@@ -226,7 +228,7 @@ class UnifiedTTSManager: ObservableObject {
                 options: .notifyOthersOnDeactivation
             )
         } catch {
-            print("[UnifiedTTSManager] Audio session deactivation error: \(error)")
+            logger.warning("Audio session deactivation error: \(error.localizedDescription)")
         }
     }
     

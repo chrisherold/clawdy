@@ -1,9 +1,11 @@
 import AVFoundation
+import OSLog
 import UIKit
 
 /// Service for handling camera capabilities (list, snap, clip) for node invocations.
 /// Uses AVFoundation for camera access and capture.
 actor CameraCapabilityService {
+    private let logger = Logger(subsystem: "com.clawdy", category: "camera")
     
     // MARK: - Errors
     
@@ -119,7 +121,7 @@ actor CameraCapabilityService {
         delayMs: Int?
     ) async throws -> CameraSnapResult {
         // Ensure camera permission
-        print("[CameraCapabilityService] snap request: facing=\(facing) maxWidth=\(String(describing: maxWidth)) quality=\(String(describing: quality)) delayMs=\(String(describing: delayMs))")
+        logger.debug("snap request: facing=\(String(describing: facing), privacy: .public) maxWidth=\(String(describing: maxWidth)) quality=\(String(describing: quality)) delayMs=\(String(describing: delayMs))")
         try await ensureAccess(for: .video)
         
         let normalizedMaxWidth = maxWidth ?? Self.defaultMaxWidth
@@ -132,10 +134,10 @@ actor CameraCapabilityService {
         
         // Get camera device
         guard let device = Self.pickCamera(facing: facing) else {
-            print("[CameraCapabilityService] snap failed: no camera for facing=\(facing)")
+            logger.error("snap failed: no camera for facing=\(String(describing: facing), privacy: .public)")
             throw CameraServiceError.cameraUnavailable
         }
-        print("[CameraCapabilityService] snap using device=\(device.localizedName) id=\(device.uniqueID)")
+        logger.debug("snap using device=\(device.localizedName, privacy: .public) id=\(device.uniqueID, privacy: .public)")
         
         // Add camera input/output on the main thread (AVCaptureSession is not thread-safe)
         let output = AVCapturePhotoOutput()
@@ -145,13 +147,13 @@ actor CameraCapabilityService {
             
             let input = try AVCaptureDeviceInput(device: device)
             guard session.canAddInput(input) else {
-                print("[CameraCapabilityService] snap failed: cannot add camera input")
+                logger.error("snap failed: cannot add camera input")
                 throw CameraServiceError.captureFailed("Failed to add camera input")
             }
             session.addInput(input)
             
             guard session.canAddOutput(output) else {
-                print("[CameraCapabilityService] snap failed: cannot add photo output")
+                logger.error("snap failed: cannot add photo output")
                 throw CameraServiceError.captureFailed("Failed to add photo output")
             }
             session.addOutput(output)
@@ -161,13 +163,13 @@ actor CameraCapabilityService {
         // Start session on capture queue
         await runOnCaptureQueue {
             session.startRunning()
-            print("[CameraCapabilityService] snap session running=\(session.isRunning)")
+            self.logger.debug("snap session running=\(session.isRunning)")
         }
         defer {
             Task {
                 await self.runOnCaptureQueue {
                     session.stopRunning()
-                    print("[CameraCapabilityService] snap session stopped")
+                    self.logger.debug("snap session stopped")
                 }
             }
         }
@@ -204,7 +206,7 @@ actor CameraCapabilityService {
             Task {
                 await self.runOnCaptureQueue {
                     output.capturePhoto(with: settings, delegate: delegate)
-                    print("[CameraCapabilityService] snap capture requested")
+                    self.logger.debug("snap capture requested")
                 }
             }
         }
@@ -235,7 +237,7 @@ actor CameraCapabilityService {
         while let data = jpegData, data.count > Self.maxPayloadBytes && currentQuality > 0.3 {
             currentQuality -= 0.1
             jpegData = processedImage.jpegData(compressionQuality: currentQuality)
-            print("[CameraCapabilityService] snap reducing quality to \(String(format: "%.1f", currentQuality)) (size: \(data.count) bytes)")
+            logger.debug("snap reducing quality to \(String(format: "%.1f", currentQuality)) (size: \(data.count) bytes)")
         }
         
         // If still too large after quality reduction, resize further
@@ -243,7 +245,7 @@ actor CameraCapabilityService {
             let currentWidth = processedImage.size.width
             if currentWidth < 400 {
                 // Don't go below 400px width
-                print("[CameraCapabilityService] snap warning: image still large at \(data.count) bytes after max compression")
+                logger.warning("snap: image still large at \(data.count) bytes after max compression")
                 break
             }
             let newWidth = currentWidth * 0.75
@@ -254,7 +256,7 @@ actor CameraCapabilityService {
             if let resized = processedImage.resized(to: newSize) {
                 processedImage = resized
                 jpegData = processedImage.jpegData(compressionQuality: currentQuality)
-                print("[CameraCapabilityService] snap resizing to \(Int(newWidth))px (size: \(jpegData?.count ?? 0) bytes)")
+                logger.debug("snap resizing to \(Int(newWidth))px (size: \(jpegData?.count ?? 0) bytes)")
             } else {
                 break
             }
@@ -264,7 +266,7 @@ actor CameraCapabilityService {
             throw CameraServiceError.captureFailed("Failed to encode image as JPEG")
         }
         
-        print("[CameraCapabilityService] snap final size: \(finalData.count) bytes, quality: \(String(format: "%.1f", currentQuality)), dimensions: \(Int(processedImage.size.width))x\(Int(processedImage.size.height))")
+        logger.debug("snap final size: \(finalData.count) bytes, quality: \(String(format: "%.1f", currentQuality)), dimensions: \(Int(processedImage.size.width))x\(Int(processedImage.size.height))")
         
         // Provide haptic feedback for photo capture
         await MainActor.run {
@@ -295,7 +297,7 @@ actor CameraCapabilityService {
         includeAudio: Bool
     ) async throws -> CameraClipResult {
         // Ensure camera permission
-        print("[CameraCapabilityService] clip request: facing=\(facing) durationMs=\(String(describing: durationMs)) includeAudio=\(includeAudio)")
+        logger.debug("clip request: facing=\(String(describing: facing), privacy: .public) durationMs=\(String(describing: durationMs)) includeAudio=\(includeAudio)")
         try await ensureAccess(for: .video)
         
         // Ensure microphone permission if audio is requested
@@ -311,10 +313,10 @@ actor CameraCapabilityService {
         
         // Get camera device
         guard let camera = Self.pickCamera(facing: facing) else {
-            print("[CameraCapabilityService] clip failed: no camera for facing=\(facing)")
+            logger.error("clip failed: no camera for facing=\(String(describing: facing), privacy: .public)")
             throw CameraServiceError.cameraUnavailable
         }
-        print("[CameraCapabilityService] clip using device=\(camera.localizedName) id=\(camera.uniqueID)")
+        logger.debug("clip using device=\(camera.localizedName, privacy: .public) id=\(camera.uniqueID, privacy: .public)")
         
         // Add inputs/outputs on capture queue (AVCaptureSession is not thread-safe)
         let output = AVCaptureMovieFileOutput()
@@ -349,13 +351,13 @@ actor CameraCapabilityService {
         // Start session
         await runOnCaptureQueue {
             session.startRunning()
-            print("[CameraCapabilityService] clip session running=\(session.isRunning)")
+            self.logger.debug("clip session running=\(session.isRunning)")
         }
         defer {
             Task {
                 await self.runOnCaptureQueue {
                     session.stopRunning()
-                    print("[CameraCapabilityService] clip session stopped")
+                    self.logger.debug("clip session stopped")
                 }
             }
         }
@@ -383,7 +385,7 @@ actor CameraCapabilityService {
             Task {
                 await self.runOnCaptureQueue {
                     output.startRecording(to: tempMovURL, recordingDelegate: delegate)
-                    print("[CameraCapabilityService] clip recording started")
+                    self.logger.debug("clip recording started")
                 }
             }
 
@@ -392,7 +394,7 @@ actor CameraCapabilityService {
                 try? await Task.sleep(nanoseconds: timeoutNs)
                 await self.runOnCaptureQueue {
                     if output.isRecording {
-                        print("[CameraCapabilityService] clip timeout reached, stopping recording")
+                        self.logger.debug("clip timeout reached, stopping recording")
                         output.stopRecording()
                     }
                 }
@@ -432,7 +434,7 @@ actor CameraCapabilityService {
     private func ensureAccess(for mediaType: AVMediaType) async throws {
         let status = AVCaptureDevice.authorizationStatus(for: mediaType)
         let kind = mediaType == .video ? "Camera" : "Microphone"
-        print("[CameraCapabilityService] \(kind) auth status: \(status.rawValue)")
+        logger.debug("\(kind, privacy: .public) auth status: \(status.rawValue)")
         
         switch status {
         case .authorized:
@@ -555,6 +557,7 @@ actor CameraCapabilityService {
 
 /// Delegate for handling AVCapturePhotoOutput capture callbacks.
 private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+    private let logger = Logger(subsystem: "com.clawdy", category: "camera")
     private var continuation: CheckedContinuation<Data, Error>?
     private let onComplete: (() -> Void)?
     private var didResume = false
@@ -579,24 +582,24 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
         error: Error?
     ) {
         if let error = error {
-            print("[CameraCapabilityService] snap processing error: \(error)")
+            logger.error("snap processing error: \(error.localizedDescription)")
             finish(.failure(error))
             return
         }
         
         guard let data = photo.fileDataRepresentation() else {
-            print("[CameraCapabilityService] snap failed: no photo data")
+            logger.error("snap failed: no photo data")
             finish(.failure(CameraCapabilityService.CameraServiceError.captureFailed("No photo data")))
             return
         }
         
         if data.isEmpty {
-            print("[CameraCapabilityService] snap failed: photo data empty")
+            logger.error("snap failed: photo data empty")
             finish(.failure(CameraCapabilityService.CameraServiceError.captureFailed("Photo data empty")))
             return
         }
         
-        print("[CameraCapabilityService] snap success bytes=\(data.count)")
+        logger.debug("snap success bytes=\(data.count)")
         finish(.success(data))
     }
     
@@ -606,7 +609,7 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
         error: Error?
     ) {
         guard let error = error else { return }
-        print("[CameraCapabilityService] snap capture error: \(error)")
+        logger.error("snap capture error: \(error.localizedDescription)")
         finish(.failure(error))
     }
 }
@@ -615,6 +618,7 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
 
 /// Delegate for handling AVCaptureMovieFileOutput recording callbacks.
 private final class MovieRecordingDelegate: NSObject, AVCaptureFileOutputRecordingDelegate {
+    private let logger = Logger(subsystem: "com.clawdy", category: "camera")
     private var continuation: CheckedContinuation<URL, Error>?
     private let onComplete: (() -> Void)?
     private var didResume = false
@@ -647,7 +651,7 @@ private final class MovieRecordingDelegate: NSObject, AVCaptureFileOutputRecordi
                 finish(.success(outputFileURL))
                 return
             }
-            print("[CameraCapabilityService] clip recording error: \(error)")
+            logger.error("clip recording error: \(error.localizedDescription)")
             finish(.failure(error))
             return
         }

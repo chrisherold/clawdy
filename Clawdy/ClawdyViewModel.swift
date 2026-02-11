@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import OSLog
 import SwiftUI
 import UIKit
 import PhotosUI
@@ -261,6 +262,7 @@ struct TranscriptMessage: Identifiable, Equatable, Codable {
 
 @MainActor
 class ClawdyViewModel: ObservableObject {
+    private let logger = Logger(subsystem: "com.clawdy", category: "viewmodel")
     @Published var isRecording = false
     @Published var isSpeaking = false
     @Published var isGeneratingAudio = false
@@ -268,7 +270,7 @@ class ClawdyViewModel: ObservableObject {
         didSet {
             UserDefaults.standard.set(isContinuousMode, forKey: "com.clawdy.continuousMode")
             UIApplication.shared.isIdleTimerDisabled = isContinuousMode
-            print("[ContinuousMode] didSet: isContinuousMode=\(isContinuousMode), isIdleTimerDisabled=\(UIApplication.shared.isIdleTimerDisabled)")
+            logger.debug("ContinuousMode didSet: isContinuousMode=\(self.isContinuousMode), isIdleTimerDisabled=\(UIApplication.shared.isIdleTimerDisabled)")
         }
     }
     @Published var connectionStatus: ConnectionStatus = .disconnected(reason: "Not connected") {
@@ -423,7 +425,7 @@ class ClawdyViewModel: ObservableObject {
         // Set up timeout restart callback (handles Apple's 60s limit)
         speechRecognizer.onTimeoutRestart = { [weak self] in
             guard let self = self, self.isContinuousMode else { return }
-            print("[ContinuousMode] Recognition timeout - restarting")
+            logger.info("ContinuousMode: recognition timeout - restarting")
             self.isRecording = false
             self.restartRecordingWithRecovery()
         }
@@ -431,7 +433,7 @@ class ClawdyViewModel: ObservableObject {
         // Set up callback for when recognition stops unexpectedly (error or isFinal)
         speechRecognizer.onRecognitionStopped = { [weak self] in
             guard let self = self, self.isContinuousMode else { return }
-            print("[ContinuousMode] Recognition stopped unexpectedly - restarting")
+            logger.warning("ContinuousMode: recognition stopped unexpectedly - restarting")
             self.isRecording = false
             self.restartRecordingWithRecovery()
         }
@@ -443,27 +445,27 @@ class ClawdyViewModel: ObservableObject {
         let baseDelay: TimeInterval = 0.3
 
         guard retryCount < maxRetries else {
-            print("[ContinuousMode] Max retries reached, stopping continuous mode")
+            logger.error("ContinuousMode: max retries reached, stopping continuous mode")
             isContinuousMode = false
             return
         }
 
         let delay = baseDelay * pow(2.0, Double(retryCount))
 
-        print("[ContinuousMode] restartRecordingWithRecovery attempt \(retryCount + 1)/\(maxRetries), delay: \(delay)s")
+        logger.debug("ContinuousMode: restartRecordingWithRecovery attempt \(retryCount + 1)/\(maxRetries), delay: \(delay)s")
 
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self = self else { return }
             guard self.isContinuousMode else {
-                print("[ContinuousMode] Recovery aborted: continuous mode disabled")
+                logger.debug("ContinuousMode: recovery aborted - continuous mode disabled")
                 return
             }
             guard !self.isRecording else {
-                print("[ContinuousMode] Recovery aborted: already recording")
+                logger.debug("ContinuousMode: recovery aborted - already recording")
                 return
             }
             guard !self.isSpeaking else {
-                print("[ContinuousMode] Recovery deferred: still speaking, will restart when TTS finishes")
+                logger.debug("ContinuousMode: recovery deferred - still speaking, will restart when TTS finishes")
                 return
             }
 
@@ -476,9 +478,9 @@ class ClawdyViewModel: ObservableObject {
                             self.speechRecognizer.startSilenceDetection()
                         }
                     }
-                    print("[ContinuousMode] Recording restarted successfully")
+                    logger.info("ContinuousMode: recording restarted successfully")
                 } catch {
-                    print("[ContinuousMode] Restart failed (attempt \(retryCount + 1)): \(error)")
+                    logger.warning("ContinuousMode: restart failed (attempt \(retryCount + 1)): \(error.localizedDescription)")
                     await MainActor.run {
                         self.restartRecordingWithRecovery(retryCount: retryCount + 1)
                     }
@@ -595,7 +597,7 @@ class ClawdyViewModel: ObservableObject {
                 guard let self = self else { return }
                 // Load history when we gain chat capability
                 if status.hasChatCapability {
-                    print("[ViewModel] Chat capability available, loading gateway history...")
+                    logger.info("Chat capability available, loading gateway history...")
                     Task { await self.loadGatewayHistory() }
                 }
             }
@@ -605,7 +607,7 @@ class ClawdyViewModel: ObservableObject {
         // This catches any messages that arrived while the app was backgrounded
         // (e.g., from cron jobs, sub-agents, or other async sources).
         gatewayDualConnectionManager.onDidBecomeActiveWhileConnected = { [weak self] in
-            print("[ViewModel] App became active while connected, refreshing chat history...")
+            logger.info("App became active while connected, refreshing chat history...")
             Task { await self?.loadGatewayHistory() }
         }
         
@@ -648,7 +650,7 @@ class ClawdyViewModel: ObservableObject {
                     return
                 }
                 
-                print("[ClawdyViewModel] Received notification reply: \"\(replyText.prefix(50))...\"")
+                logger.info("Received notification reply: \"\(replyText.prefix(50), privacy: .public)...\"")
                 
                 // Add the reply as a user message and send to agent
                 self.addMessage(replyText, isUser: true)
@@ -720,7 +722,7 @@ class ClawdyViewModel: ObservableObject {
         isContinuousMode.toggle()
         // Explicitly set idle timer (didSet on @Published can be unreliable)
         UIApplication.shared.isIdleTimerDisabled = isContinuousMode
-        print("[ContinuousMode] toggled to \(isContinuousMode), isIdleTimerDisabled = \(UIApplication.shared.isIdleTimerDisabled)")
+        logger.info("ContinuousMode: toggled to \(self.isContinuousMode), isIdleTimerDisabled = \(UIApplication.shared.isIdleTimerDisabled)")
 
         if isContinuousMode {
             // Start recording if not already recording or speaking
@@ -745,7 +747,7 @@ class ClawdyViewModel: ObservableObject {
                 try session.setCategory(.ambient)
                 try session.setActive(false, options: .notifyOthersOnDeactivation)
             } catch {
-                print("[ContinuousMode] Audio session cleanup error: \(error)")
+                logger.warning("ContinuousMode: audio session cleanup error: \(error.localizedDescription)")
             }
         }
     }
@@ -756,7 +758,7 @@ class ClawdyViewModel: ObservableObject {
     /// Restart recording after TTS finishes in continuous mode
     private func restartRecordingForContinuousMode() {
         guard !isRestartingContinuousMode else {
-            print("[ContinuousMode] restartRecordingForContinuousMode: already restarting, skipping")
+            logger.debug("ContinuousMode: restartRecordingForContinuousMode - already restarting, skipping")
             return
         }
         isRestartingContinuousMode = true
@@ -767,23 +769,23 @@ class ClawdyViewModel: ObservableObject {
             self.isRestartingContinuousMode = false
 
             guard self.isContinuousMode else {
-                print("[ContinuousMode] restartRecordingForContinuousMode: continuous mode disabled, aborting")
+                logger.debug("ContinuousMode: restartRecordingForContinuousMode - continuous mode disabled, aborting")
                 return
             }
             guard !self.isRecording else {
-                print("[ContinuousMode] restartRecordingForContinuousMode: already recording, skipping")
+                logger.debug("ContinuousMode: restartRecordingForContinuousMode - already recording, skipping")
                 return
             }
             guard !self.isSpeaking else {
-                print("[ContinuousMode] restartRecordingForContinuousMode: still speaking, will retry when TTS finishes")
+                logger.debug("ContinuousMode: restartRecordingForContinuousMode - still speaking, will retry when TTS finishes")
                 return
             }
             guard !self.processingState.isActive else {
-                print("[ContinuousMode] restartRecordingForContinuousMode: still processing, will retry when processing finishes")
+                logger.debug("ContinuousMode: restartRecordingForContinuousMode - still processing, will retry when processing finishes")
                 return
             }
 
-            print("[ContinuousMode] Restarting recording via recovery")
+            logger.info("ContinuousMode: restarting recording via recovery")
             self.restartRecordingWithRecovery()
         }
     }
@@ -1173,26 +1175,26 @@ class ClawdyViewModel: ObservableObject {
         do {
             let data = try await gatewayChatClient.requestHistory()
             let payload = try JSONDecoder().decode(GatewayChatHistoryPayload.self, from: data)
-            print("[ViewModel] Gateway history received: \(payload.messages.count) messages for session \(payload.sessionKey)")
+            logger.info("Gateway history received: \(payload.messages.count) messages for session \(payload.sessionKey, privacy: .public)")
             let historyMessages = mapGatewayHistoryMessages(payload.messages)
-            print("[ViewModel] Mapped to \(historyMessages.count) transcript messages")
+            logger.debug("Mapped to \(historyMessages.count) transcript messages")
             await MainActor.run {
                 // Clear any streaming state before replacing messages with history
                 // This prevents duplicate messages when history includes content that was streaming
                 if let streaming = self.streamingMessage, !streaming.text.isEmpty {
-                    print("[ViewModel] Clearing streaming message before history update: '\(streaming.text.prefix(50))...'")
+                    logger.debug("Clearing streaming message before history update: '\(streaming.text.prefix(50), privacy: .public)...'")
                 }
                 self.streamingMessage = nil
                 self.streamingResponseText = ""
                 self.gatewayFullText = ""
                 
                 self.messages = historyMessages
-                print("[ViewModel] Updated messages array, now has \(self.messages.count) messages")
+                logger.debug("Updated messages array, now has \(self.messages.count) messages")
             }
             await MessagePersistenceManager.shared.clearAllMessages()
             await MessagePersistenceManager.shared.saveMessages(historyMessages)
         } catch {
-            print("[ViewModel] Failed to load gateway history: \(error.localizedDescription)")
+            logger.error("Failed to load gateway history: \(error.localizedDescription)")
         }
     }
     
@@ -1585,12 +1587,12 @@ class ClawdyViewModel: ObservableObject {
                     if finalText.count > gatewayFullText.count && finalText.hasPrefix(gatewayFullText) {
                         let missingSuffix = String(finalText.dropFirst(gatewayFullText.count))
                         if !missingSuffix.isEmpty && inputMode == .voice && !isGatewayToolExecuting {
-                            print("[TTS] Final text has additional content: '\(missingSuffix)'")
+                            logger.debug("TTS: final text has additional content: '\(missingSuffix, privacy: .public)'")
                             incrementalTTS.appendText(missingSuffix)
                         }
                     } else if gatewayFullText.isEmpty && inputMode == .voice && !isGatewayToolExecuting {
                         // No deltas were received, send the entire final text
-                        print("[TTS] No deltas received, sending entire final text")
+                        logger.debug("TTS: no deltas received, sending entire final text")
                         incrementalTTS.appendText(finalText)
                     }
                     gatewayFullText = finalText
@@ -1881,7 +1883,7 @@ class ClawdyViewModel: ObservableObject {
         // Apply session key from settings before connecting
         if let credentials = KeychainManager.shared.loadGatewayCredentials() {
             gatewayDualConnectionManager.chatSessionKey = credentials.sessionKey
-            print("[ClawdyViewModel] Using session key: \(credentials.sessionKey)")
+            logger.info("Using session key: \(credentials.sessionKey, privacy: .public)")
         }
 
         // Reflect current gateway dual connection status before attempting to connect.
@@ -2056,7 +2058,7 @@ class ClawdyViewModel: ObservableObject {
             // Check if app is in background
             let isBackground = await MainActor.run { UIApplication.shared.applicationState == .background }
             
-            print("[chat.push] Received agent message: \"\(text.prefix(50))...\" speak=\(speak) isBackground=\(isBackground)")
+            logger.info("Received agent message: \"\(text.prefix(50), privacy: .public)...\" speak=\(speak) isBackground=\(isBackground)")
             
             // Add as agent message (not user message)
             // This appends to the transcript and persists to local storage
@@ -2169,14 +2171,14 @@ class ClawdyViewModel: ObservableObject {
         
         // location.get - Get current location
         let locationGetHandler: (LocationGetParams) async -> LocationGetResult = { params in
-            print("[NodeCapabilityHandler] location.get invoked with params: \(params)")
+            logger.info("location.get invoked")
             return await LocationCapabilityService.shared.getLocation(params: params)
         }
         nodeCapabilityHandler.onLocationGet = locationGetHandler
         
         // system.notify - Show a notification (without adding to chat)
         let systemNotifyHandler: (SystemNotifyParams) async -> SystemNotifyResult = { params in
-            print("[NodeCapabilityHandler] system.notify invoked - title: \(params.title)")
+            logger.info("system.notify invoked - title: \(params.title, privacy: .public)")
             let result = await NotificationManager.shared.scheduleSystemNotification(
                 title: params.title,
                 body: params.body,

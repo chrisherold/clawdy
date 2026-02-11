@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import OSLog
 
 /// Manages incremental text-to-speech for streaming responses.
 /// Buffers incoming text chunks and speaks complete sentences as they arrive.
@@ -10,6 +11,8 @@ import AVFoundation
 /// automatically using the user's preferred TTS engine.
 @MainActor
 class IncrementalTTSManager: NSObject, ObservableObject {
+    private let logger = Logger(subsystem: "com.clawdy", category: "incremental-tts")
+    
     // MARK: - Published State
     
     @Published private(set) var isSpeaking = false
@@ -210,7 +213,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     /// Flush any remaining buffered text and speak it.
     /// Call this when the stream is complete.
     func flush() {
-        print("[TTS Flush] Called - codeMarkerBuffer: '\(codeMarkerBuffer)', sentenceBuffer: '\(sentenceBuffer.suffix(50))', pendingClause: '\(pendingClause ?? "nil")'")
+        logger.debug("Flush called - codeMarkerBuffer: '\(self.codeMarkerBuffer)', sentenceBuffer: '\(self.sentenceBuffer.suffix(50), privacy: .public)', pendingClause: '\(self.pendingClause ?? "nil")'")
 
         // First, flush any text stuck in the code marker buffer
         // (handles case where stream ends with incomplete backticks)
@@ -238,7 +241,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
             }
         }
 
-        print("[TTS Flush] Final text to speak: '\(allRemaining)'")
+        logger.debug("Flush final text to speak: '\(allRemaining, privacy: .public)'")
 
         // Speak all remaining text if any
         if !allRemaining.isEmpty {
@@ -571,7 +574,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         // into human-friendly spoken forms before queueing for TTS.
         let normalized = TTSTextNormalizer.normalize(trimmed)
 
-        print("[TTS Enqueue] Adding to queue: '\(normalized.prefix(60))...' (queue size: \(speechQueue.count + 1))")
+        logger.debug("Enqueue: '\(normalized.prefix(60), privacy: .public)...' (queue size: \(self.speechQueue.count + 1))")
 
         speechQueue.append(normalized)
         updateState()
@@ -586,7 +589,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     /// Routes to either Kokoro or system TTS based on user preference.
     private func speakNext() {
         guard !speechQueue.isEmpty else {
-            print("[TTS SpeakNext] Queue empty, stopping")
+            logger.debug("SpeakNext: queue empty, stopping")
             currentlySpeaking = false
             updateState()
             // Keep audio session active for a moment in case more text is coming
@@ -594,7 +597,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         }
 
         let sentence = speechQueue.removeFirst()
-        print("[TTS SpeakNext] Speaking: '\(sentence.prefix(60))...' (remaining in queue: \(speechQueue.count))")
+        logger.debug("SpeakNext: '\(sentence.prefix(60), privacy: .public)...' (remaining in queue: \(self.speechQueue.count))")
         currentlySpeaking = true
         updateState()
         
@@ -623,7 +626,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
             let isConfigured = await elevenLabs.isConfigured
 
             guard isConfigured else {
-                print("[IncrementalTTSManager] ElevenLabs not configured, falling back to system TTS")
+                logger.info("ElevenLabs not configured, falling back to system TTS")
                 await MainActor.run {
                     self.speakWithSystem(sentence)
                 }
@@ -643,14 +646,14 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                 }
                 let speed = await MainActor.run { voiceSettings.settings.speechRate }
 
-                print("[IncrementalTTSManager] Speaking with ElevenLabs: \(sentence.prefix(30))...")
+                logger.debug("Speaking with ElevenLabs: \(sentence.prefix(30), privacy: .public)...")
                 try await elevenLabs.speak(text: sentence, voiceId: voiceId, speed: speed)
 
                 await MainActor.run {
                     self.handleSpeechComplete()
                 }
             } catch {
-                print("[IncrementalTTSManager] ElevenLabs error: \(error), falling back to system TTS")
+                logger.warning("ElevenLabs error: \(error.localizedDescription), falling back to system TTS")
                 await MainActor.run {
                     self.speakWithSystem(sentence)
                 }
@@ -670,7 +673,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
             
             guard isReady else {
                 // Fall back to system TTS if Kokoro not downloaded
-                print("[IncrementalTTSManager] Kokoro not ready, falling back to system TTS")
+                logger.info("Kokoro not ready, falling back to system TTS")
                 await MainActor.run {
                     self.speakWithSystem(sentence)
                 }
@@ -702,7 +705,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                 
                 if let prefetchedBuffer = maybePrefetched {
                     // Play prefetched audio - no generation wait!
-                    print("[IncrementalTTSManager] Using prefetched audio for: \(sentence.prefix(30))...")
+                    logger.debug("Using prefetched audio for: \(sentence.prefix(30), privacy: .public)...")
                     
                     // Start prefetching next sentence before playing
                     await MainActor.run { self.startPrefetchingNextSentence(speed: speed) }
@@ -711,7 +714,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                 } else if sentence.count > 100 {
                     // Long sentence - use streaming to start playback sooner
                     // Text >100 chars will be chunked, so streaming helps
-                    print("[IncrementalTTSManager] Streaming long sentence: \(sentence.prefix(30))...")
+                    logger.debug("Streaming long sentence: \(sentence.prefix(30), privacy: .public)...")
                     
                     // Start prefetching next sentence early (during first chunk generation)
                     await MainActor.run { self.startPrefetchingNextSentence(speed: speed) }
@@ -719,7 +722,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                     try await kokoroManager.speakTextStreaming(sentence, speed: speed)
                 } else {
                     // Short sentence - generate and play (no chunking benefit from streaming)
-                    print("[IncrementalTTSManager] Generating audio on-demand for: \(sentence.prefix(30))...")
+                    logger.debug("Generating audio on-demand for: \(sentence.prefix(30), privacy: .public)...")
                     
                     // Generate audio
                     let buffer = try await kokoroManager.generateAudio(text: sentence, speed: speed)
@@ -742,7 +745,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                 
             } catch {
                 // Handle errors - try to continue with next sentence or fall back
-                print("[IncrementalTTSManager] Kokoro error: \(error.localizedDescription)")
+                logger.error("Kokoro error: \(error.localizedDescription)")
                 
                 await MainActor.run {
                     self.isGeneratingAudio = false
@@ -776,7 +779,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
             return
         }
         
-        print("[IncrementalTTSManager] Prefetching next sentence: \(nextSentence.prefix(30))...")
+        logger.debug("Prefetching next sentence: \(nextSentence.prefix(30), privacy: .public)...")
         
         prefetchTask = Task { [weak self] in
             guard let self = self else { return }
@@ -791,15 +794,15 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                         if self.speechQueue.first == nextSentence {
                             self.prefetchedAudio = buffer
                             self.prefetchedSentence = nextSentence
-                            print("[IncrementalTTSManager] Prefetch complete for: \(nextSentence.prefix(30))...")
+                            logger.debug("Prefetch complete for: \(nextSentence.prefix(30), privacy: .public)...")
                         } else {
-                            print("[IncrementalTTSManager] Prefetch discarded (queue changed)")
+                            logger.debug("Prefetch discarded (queue changed)")
                         }
                     }
                 }
             } catch {
                 if !Task.isCancelled {
-                    print("[IncrementalTTSManager] Prefetch failed: \(error.localizedDescription)")
+                    logger.warning("Prefetch failed: \(error.localizedDescription)")
                 }
                 // Prefetch failure is not critical - will generate on-demand
             }
@@ -843,14 +846,14 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     
     /// Handle completion of a spoken sentence (from either engine).
     private func handleSpeechComplete() {
-        print("[TTS Complete] Speech finished, queue size: \(speechQueue.count)")
+        logger.debug("Speech finished, queue size: \(self.speechQueue.count)")
 
         // Speak the next sentence in queue
         speakNext()
 
         // If queue is empty and no more text coming, we're done
         if speechQueue.isEmpty && !currentlySpeaking {
-            print("[TTS Complete] All done, deactivating audio session after delay")
+            logger.debug("All done, deactivating audio session after delay")
             BackgroundAudioManager.shared.audioEnded()
             // Delay deactivation slightly to handle back-to-back sentences
             Task {
@@ -873,17 +876,17 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         // If user has selected a specific voice, use it
         if let identifier = voiceSettings.settings.voiceIdentifier,
            let voice = AVSpeechSynthesisVoice(identifier: identifier) {
-            print("[IncrementalTTSManager] Using user-selected voice: \(voice.name) (quality: \(voice.quality.rawValue))")
+            logger.debug("Using user-selected voice: \(voice.name, privacy: .public) (quality: \(voice.quality.rawValue, privacy: .public))")
             return voice
         }
         
         // Use the shared best voice finder
         if let voice = SpeechSynthesizer.findBestVoice() {
-            print("[IncrementalTTSManager] Auto-selected voice: \(voice.name) (quality: \(voice.quality.rawValue))")
+            logger.debug("Auto-selected voice: \(voice.name, privacy: .public) (quality: \(voice.quality.rawValue, privacy: .public))")
             return voice
         }
         
-        print("[IncrementalTTSManager] Falling back to default en-US voice")
+        logger.debug("Falling back to default en-US voice")
         return AVSpeechSynthesisVoice(language: "en-US")
     }
     
@@ -898,7 +901,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
             )
             try audioSession.setActive(true)
         } catch {
-            print("[IncrementalTTSManager] Audio session error: \(error)")
+            logger.error("Audio session error: \(error.localizedDescription)")
         }
     }
     
@@ -910,7 +913,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                 options: .notifyOthersOnDeactivation
             )
         } catch {
-            print("[IncrementalTTSManager] Audio session deactivation error: \(error)")
+            logger.warning("Audio session deactivation error: \(error.localizedDescription)")
         }
     }
 }

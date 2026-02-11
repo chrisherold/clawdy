@@ -3,6 +3,7 @@ import AVFoundation
 import CryptoKit
 import KokoroSwift
 import MLX
+import OSLog
 import MLXUtilsLibrary
 
 /// Manages on-device neural TTS using the Kokoro model.
@@ -19,6 +20,7 @@ actor KokoroTTSManager {
     // MARK: - Singleton
     
     static let shared = KokoroTTSManager()
+    private let logger = Logger(subsystem: "com.clawdy", category: "kokoro-tts")
     
     // MARK: - State
     
@@ -185,7 +187,7 @@ actor KokoroTTSManager {
         let memoryLimitMB = 900
         MLX.Memory.memoryLimit = memoryLimitMB * 1024 * 1024
         
-        print("[KokoroTTSManager] Configured MLX memory: cache=\(cacheLimitMB)MB, limit=\(memoryLimitMB)MB")
+        logger.info("Configured MLX memory: cache=\(cacheLimitMB)MB, limit=\(memoryLimitMB)MB")
     }
     
     // MARK: - Public Interface: Model Handling
@@ -248,14 +250,14 @@ actor KokoroTTSManager {
             // Load the engine
             try await loadEngineIfNeeded()
             
-            print("[KokoroTTSManager] Model download and initialization complete")
+            logger.info("Model download and initialization complete")
         } catch is CancellationError {
             state = .notDownloaded
-            print("[KokoroTTSManager] Download was cancelled")
+            logger.info("Download was cancelled")
             throw CancellationError()
         } catch {
             state = .error(message: error.localizedDescription)
-            print("[KokoroTTSManager] Download failed: \(error)")
+            logger.error("Download failed: \(error.localizedDescription)")
             throw error
         }
     }
@@ -292,7 +294,7 @@ actor KokoroTTSManager {
         var request = URLRequest(url: url)
         if existingBytes > 0 {
             request.setValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range")
-            print("[KokoroTTSManager] Resuming download from byte \(existingBytes)")
+            logger.info("Resuming download from byte \(existingBytes)")
         }
         
         // Use URLSession with progress tracking
@@ -376,7 +378,7 @@ actor KokoroTTSManager {
         
         // Verify checksum before moving to final destination
         if let expectedChecksum = modelVariant.expectedChecksum {
-            print("[KokoroTTSManager] Verifying model checksum...")
+            logger.info("Verifying model checksum...")
             let computedChecksum = try await computeSHA256Checksum(of: tempDestination)
             
             if computedChecksum.lowercased() != expectedChecksum.lowercased() {
@@ -384,9 +386,9 @@ actor KokoroTTSManager {
                 try? FileManager.default.removeItem(at: tempDestination)
                 throw KokoroError.checksumMismatch(expected: expectedChecksum, actual: computedChecksum)
             }
-            print("[KokoroTTSManager] Checksum verified successfully")
+            logger.info("Checksum verified successfully")
         } else {
-            print("[KokoroTTSManager] Skipping checksum verification (no expected checksum)")
+            logger.debug("Skipping checksum verification (no expected checksum)")
         }
         
         // Move temp file to final destination
@@ -399,7 +401,7 @@ actor KokoroTTSManager {
         let finalProgress = baseProgress + progressWeight
         state = .downloading(progress: finalProgress)
         
-        print("[KokoroTTSManager] Downloaded \(destination.lastPathComponent): \(receivedLength) bytes")
+        logger.info("Downloaded \(destination.lastPathComponent, privacy: .public): \(receivedLength) bytes")
     }
     
     /// Cancel any active download and clean up partial files
@@ -411,7 +413,7 @@ actor KokoroTTSManager {
         cleanupPartialDownloads()
         
         state = .notDownloaded
-        print("[KokoroTTSManager] Download cancelled and partial files cleaned up")
+        logger.info("Download cancelled and partial files cleaned up")
     }
     
     /// Clean up any partial download files (.download extension)
@@ -420,7 +422,7 @@ actor KokoroTTSManager {
         
         if FileManager.default.fileExists(atPath: tempModelPath.path) {
             try? FileManager.default.removeItem(at: tempModelPath)
-            print("[KokoroTTSManager] Cleaned up partial model download")
+            logger.info("Cleaned up partial model download")
         }
     }
     
@@ -443,7 +445,7 @@ actor KokoroTTSManager {
         cleanupPartialDownloads()
         
         state = .notDownloaded
-        print("[KokoroTTSManager] Model and partial downloads deleted")
+        logger.info("Model and partial downloads deleted")
     }
     
     /// Unload the TTS engine to free memory while the model remains downloaded.
@@ -465,7 +467,7 @@ actor KokoroTTSManager {
         // Reset warm-up state
         resetWarmUpState()
         
-        print("[KokoroTTSManager] Engine unloaded to free memory")
+        logger.info("Engine unloaded to free memory")
     }
     
     /// Schedule automatic engine unloading after idle timeout.
@@ -482,7 +484,7 @@ actor KokoroTTSManager {
                 // Only unload if not generating
                 if state != .generating {
                     unloadEngine()
-                    print("[KokoroTTSManager] Engine unloaded due to inactivity")
+                    logger.info("Engine unloaded due to inactivity")
                 }
             } catch {
                 // Task was cancelled, which is expected
@@ -505,9 +507,9 @@ actor KokoroTTSManager {
         // Unload engine if not actively generating
         if unloadIfIdle && state != .generating {
             unloadEngine()
-            print("[KokoroTTSManager] Handled memory warning, unloaded engine")
+            logger.warning("Handled memory warning, unloaded engine")
         } else {
-            print("[KokoroTTSManager] Handled memory warning, cleared caches (engine in use)")
+            logger.warning("Handled memory warning, cleared caches (engine in use)")
         }
         
         // Force a garbage collection hint by autoreleasing any temporary objects
@@ -518,7 +520,7 @@ actor KokoroTTSManager {
     /// GPU work from background is NOT allowed before iOS 26 and will crash.
     /// This method stops any in-progress generation and clears caches.
     func handleBackgrounding() {
-        print("[KokoroTTSManager] App entering background, stopping GPU work")
+        logger.info("App entering background, stopping GPU work")
         
         // Stop any audio playback
         playerNode?.stop()
@@ -533,7 +535,7 @@ actor KokoroTTSManager {
         // 2. Memory pressure handler if iOS needs the memory
         // 3. Explicit unloadEngine() call in ClawdyApp when audio is not playing
         
-        print("[KokoroTTSManager] Cleared GPU caches for background")
+        logger.info("Cleared GPU caches for background")
     }
     
     // MARK: - Storage Management
@@ -672,7 +674,7 @@ actor KokoroTTSManager {
             scheduleIdleUnload()
         }
         
-        print("[KokoroTTSManager] Generating audio for: \(text.prefix(50))...")
+        logger.debug("Generating audio for: \(text.prefix(50), privacy: .public)...")
         
         // Split text into chunks to reduce peak memory usage
         let chunks = splitTextIntoChunks(text, maxLength: Self.maxChunkLength)
@@ -693,12 +695,12 @@ actor KokoroTTSManager {
             MLX.Memory.clearCache()
             
             let buffer = try createAudioBuffer(from: audioSamples)
-            print("[KokoroTTSManager] Generated \(audioSamples.count) samples")
+            logger.debug("Generated \(audioSamples.count) samples")
             return buffer
         }
         
         // Multiple chunks - generate each and concatenate
-        print("[KokoroTTSManager] Splitting into \(chunks.count) chunks for memory efficiency")
+        logger.debug("Splitting into \(chunks.count) chunks for memory efficiency")
         var allSamples: [Float] = []
         
         for (index, chunk) in chunks.enumerated() {
@@ -717,11 +719,11 @@ actor KokoroTTSManager {
             // Clear cache after each chunk to free memory
             MLX.Memory.clearCache()
             
-            print("[KokoroTTSManager] Chunk \(index + 1)/\(chunks.count): \(chunkSamples.count) samples")
+            logger.debug("Chunk \(index + 1)/\(chunks.count): \(chunkSamples.count) samples")
         }
         
         let buffer = try createAudioBuffer(from: allSamples)
-        print("[KokoroTTSManager] Generated total \(allSamples.count) samples from \(chunks.count) chunks")
+        logger.debug("Generated total \(allSamples.count) samples from \(chunks.count) chunks")
         return buffer
     }
     
@@ -763,7 +765,7 @@ actor KokoroTTSManager {
                     }
                     
                     let chunks = splitTextIntoChunks(text, maxLength: Self.maxChunkLength)
-                    print("[KokoroTTSManager] Streaming \(chunks.count) chunks for: \(text.prefix(50))...")
+                    logger.debug("Streaming \(chunks.count) chunks for: \(text.prefix(50), privacy: .public)...")
                     
                     for (index, chunk) in chunks.enumerated() {
                         // Check for cancellation
@@ -785,7 +787,7 @@ actor KokoroTTSManager {
                         MLX.Memory.clearCache()
                         
                         let buffer = try createAudioBuffer(from: chunkSamples)
-                        print("[KokoroTTSManager] Streaming chunk \(index + 1)/\(chunks.count): \(chunkSamples.count) samples")
+                        logger.debug("Streaming chunk \(index + 1)/\(chunks.count): \(chunkSamples.count) samples")
                         
                         continuation.yield(buffer)
                     }
@@ -811,7 +813,7 @@ actor KokoroTTSManager {
             try audioSession.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
             try audioSession.setActive(true)
         } catch {
-            print("[KokoroTTSManager] Audio session error: \(error)")
+            logger.error("Audio session error: \(error.localizedDescription)")
         }
         #endif
         
@@ -939,7 +941,7 @@ actor KokoroTTSManager {
         let voice = availableVoices.first { $0.id == voiceId } ?? selectedVoice
         let previewText = "Hello, this is \(voice.name)."
         
-        print("[KokoroTTSManager] Previewing voice: \(voice.name)")
+        logger.info("Previewing voice: \(voice.name, privacy: .public)")
         
         let previousState = state
         state = .generating
@@ -993,7 +995,7 @@ actor KokoroTTSManager {
             throw KokoroError.modelNotReady
         }
         
-        print("[KokoroTTSManager] Loading TTS engine...")
+        logger.info("Loading TTS engine...")
         
         // Load the TTS engine
         ttsEngine = KokoroTTS(modelPath: modelPath)
@@ -1001,18 +1003,18 @@ actor KokoroTTSManager {
         // Load voice embeddings from bundled safetensors files
         try loadBundledVoices()
         
-        print("[KokoroTTSManager] Engine loaded successfully")
+        logger.info("Engine loaded successfully")
     }
     
     /// Load voice embeddings from bundled safetensors files in the app bundle.
     /// Each voice file is a .safetensors file containing the voice embedding tensor.
     private func loadBundledVoices() throws {
-        print("[KokoroTTSManager] Loading bundled voices...")
+        logger.info("Loading bundled voices...")
         
         for voiceId in Self.bundledVoiceIds {
             // Look for the voice file in the app bundle
             guard let voiceURL = Bundle.main.url(forResource: voiceId, withExtension: "safetensors") else {
-                print("[KokoroTTSManager] Warning: Voice file not found in bundle: \(voiceId).safetensors")
+                logger.warning("Voice file not found in bundle: \(voiceId, privacy: .public).safetensors")
                 continue
             }
             
@@ -1024,20 +1026,21 @@ actor KokoroTTSManager {
                 // Try common key patterns
                 if let embedding = voiceData["weight"] {
                     voices[voiceId] = embedding
-                    print("[KokoroTTSManager] Loaded voice: \(voiceId)")
+                    logger.debug("Loaded voice: \(voiceId, privacy: .public)")
                 } else if let embedding = voiceData.values.first {
                     // If there's only one array, use it
                     voices[voiceId] = embedding
-                    print("[KokoroTTSManager] Loaded voice: \(voiceId) (using first array)")
+                    logger.debug("Loaded voice: \(voiceId, privacy: .public) (using first array)")
                 } else {
-                    print("[KokoroTTSManager] Warning: No embedding found in \(voiceId).safetensors")
+                    logger.warning("No embedding found in \(voiceId, privacy: .public).safetensors")
                 }
             } catch {
-                print("[KokoroTTSManager] Error loading voice \(voiceId): \(error)")
+                logger.error("Error loading voice \(voiceId, privacy: .public): \(error.localizedDescription)")
             }
         }
         
-        print("[KokoroTTSManager] Loaded \(voices.count) voices from bundle")
+        let voiceCount = voices.count
+        logger.info("Loaded \(voiceCount) voices from bundle")
         
         if voices.isEmpty {
             throw KokoroError.voiceNotFound("No voices loaded from bundle")
@@ -1081,7 +1084,7 @@ actor KokoroTTSManager {
             try audioSession.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
             try audioSession.setActive(true)
         } catch {
-            print("[KokoroTTSManager] Audio session error: \(error)")
+            logger.error("Audio session error: \(error.localizedDescription)")
         }
         #endif
         
@@ -1160,7 +1163,7 @@ actor KokoroTTSManager {
         
         guard let expectedChecksum = modelVariant.expectedChecksum else {
             // No checksum to verify against - assume valid
-            print("[KokoroTTSManager] No checksum available for verification, assuming valid")
+            logger.debug("No checksum available for verification, assuming valid")
             return true
         }
         
@@ -1169,14 +1172,14 @@ actor KokoroTTSManager {
             let isValid = computedChecksum.lowercased() == expectedChecksum.lowercased()
             
             if isValid {
-                print("[KokoroTTSManager] Model integrity verified successfully")
+                logger.info("Model integrity verified successfully")
             } else {
-                print("[KokoroTTSManager] Model integrity check FAILED - checksums don't match")
+                logger.error("Model integrity check FAILED - checksums don't match")
             }
             
             return isValid
         } catch {
-            print("[KokoroTTSManager] Error verifying model integrity: \(error)")
+            logger.error("Error verifying model integrity: \(error.localizedDescription)")
             return false
         }
     }
@@ -1197,17 +1200,17 @@ actor KokoroTTSManager {
     func warmUp(runInference: Bool = true) async -> Bool {
         // Skip if already warmed up or not downloaded
         guard !isWarmedUp else {
-            print("[KokoroTTSManager] Already warmed up, skipping")
+            logger.debug("Already warmed up, skipping")
             return true
         }
         
         guard modelDownloaded else {
-            print("[KokoroTTSManager] Model not downloaded, cannot warm up")
+            logger.debug("Model not downloaded, cannot warm up")
             return false
         }
         
         guard !isWarmingUp else {
-            print("[KokoroTTSManager] Warm-up already in progress")
+            logger.debug("Warm-up already in progress")
             return false
         }
         
@@ -1215,14 +1218,14 @@ actor KokoroTTSManager {
         defer { isWarmingUp = false }
         
         let startTime = CFAbsoluteTimeGetCurrent()
-        print("[KokoroTTSManager] Starting model warm-up...")
+        logger.info("Starting model warm-up...")
         
         do {
             // Load the TTS engine and voices
             try await loadEngineIfNeeded()
             
             let loadTime = CFAbsoluteTimeGetCurrent() - startTime
-            print("[KokoroTTSManager] Engine loaded in \(String(format: "%.2f", loadTime))s")
+            logger.info("Engine loaded in \(String(format: "%.2f", loadTime))s")
             
             // Optionally run a minimal inference pass to fully initialize the model
             // This "primes" the neural network and any lazy MLX operations
@@ -1242,17 +1245,17 @@ actor KokoroTTSManager {
                 MLX.Memory.clearCache()
                 
                 let inferenceTime = CFAbsoluteTimeGetCurrent() - inferenceStart
-                print("[KokoroTTSManager] Inference warm-up completed in \(String(format: "%.2f", inferenceTime))s")
+                logger.info("Inference warm-up completed in \(String(format: "%.2f", inferenceTime))s")
             }
             
             let totalTime = CFAbsoluteTimeGetCurrent() - startTime
-            print("[KokoroTTSManager] Model warm-up complete in \(String(format: "%.2f", totalTime))s")
+            logger.info("Model warm-up complete in \(String(format: "%.2f", totalTime))s")
             
             isWarmedUp = true
             return true
             
         } catch {
-            print("[KokoroTTSManager] Warm-up failed: \(error.localizedDescription)")
+            logger.error("Warm-up failed: \(error.localizedDescription)")
             return false
         }
     }
