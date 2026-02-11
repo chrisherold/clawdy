@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Manages persistent storage of chat messages using JSON file-based storage.
 /// Messages are stored in the Documents directory and retained for one week.
@@ -18,6 +19,7 @@ actor MessagePersistenceManager {
     
     /// Shared instance for app-wide message persistence
     static let shared = MessagePersistenceManager()
+    private let logger = Logger(subsystem: "com.clawdy", category: "message-persistence")
     
     // MARK: - Constants
     
@@ -53,7 +55,7 @@ actor MessagePersistenceManager {
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         
-        print("[MessagePersistence] Storage path: \(storageURL.path)")
+        logger.debug("Storage path: \(self.storageURL.path, privacy: .public)")
     }
     
     // MARK: - Public API
@@ -65,7 +67,7 @@ actor MessagePersistenceManager {
         var messages = await loadMessages()
         messages.append(message)
         await saveAllMessages(messages)
-        print("[MessagePersistence] Saved message: \(message.id)")
+        logger.debug("Saved message: \(message.id, privacy: .public)")
     }
     
     /// Save multiple messages at once (more efficient for batch operations).
@@ -74,24 +76,24 @@ actor MessagePersistenceManager {
         var existingMessages = await loadMessages()
         existingMessages.append(contentsOf: messages)
         await saveAllMessages(existingMessages)
-        print("[MessagePersistence] Saved \(messages.count) messages")
+        logger.debug("Saved \(messages.count) messages")
     }
     
     /// Load all persisted messages from storage.
     /// - Returns: Array of messages, empty if file doesn't exist or is invalid
     func loadMessages() async -> [TranscriptMessage] {
         guard FileManager.default.fileExists(atPath: storageURL.path) else {
-            print("[MessagePersistence] No message file found")
+            logger.debug("No message file found")
             return []
         }
         
         do {
             let data = try Data(contentsOf: storageURL)
             let messages = try decoder.decode([TranscriptMessage].self, from: data)
-            print("[MessagePersistence] Loaded \(messages.count) messages")
+            logger.info("Loaded \(messages.count) messages")
             return messages
         } catch {
-            print("[MessagePersistence] Failed to load messages: \(error.localizedDescription)")
+            logger.error("Failed to load messages: \(error.localizedDescription)")
             return []
         }
     }
@@ -101,10 +103,10 @@ actor MessagePersistenceManager {
         do {
             if FileManager.default.fileExists(atPath: storageURL.path) {
                 try FileManager.default.removeItem(at: storageURL)
-                print("[MessagePersistence] Cleared all messages")
+                logger.info("Cleared all messages")
             }
         } catch {
-            print("[MessagePersistence] Failed to clear messages: \(error.localizedDescription)")
+            logger.error("Failed to clear messages: \(error.localizedDescription)")
         }
     }
     
@@ -121,9 +123,9 @@ actor MessagePersistenceManager {
         
         if prunedCount > 0 {
             await saveAllMessages(filteredMessages)
-            print("[MessagePersistence] Pruned \(prunedCount) old messages")
+            logger.info("Pruned \(prunedCount) old messages")
         } else {
-            print("[MessagePersistence] No messages to prune")
+            logger.debug("No messages to prune")
         }
         
         return prunedCount
@@ -138,12 +140,12 @@ actor MessagePersistenceManager {
         if let index = messages.firstIndex(where: { $0.id == message.id }) {
             messages[index] = message
             await saveAllMessages(messages)
-            print("[MessagePersistence] Updated message: \(message.id)")
+            logger.debug("Updated message: \(message.id, privacy: .public)")
         } else {
             // Message not found, append as new
             messages.append(message)
             await saveAllMessages(messages)
-            print("[MessagePersistence] Message not found for update, saved as new: \(message.id)")
+            logger.debug("Message not found for update, saved as new: \(message.id, privacy: .public)")
         }
     }
     
@@ -172,9 +174,9 @@ actor MessagePersistenceManager {
         do {
             let data = try encoder.encode(messages)
             try data.write(to: storageURL, options: [.atomic])
-            print("[MessagePersistence] Wrote \(messages.count) messages to disk")
+            logger.debug("Wrote \(messages.count) messages to disk")
         } catch {
-            print("[MessagePersistence] Failed to save messages: \(error.localizedDescription)")
+            logger.error("Failed to save messages: \(error.localizedDescription)")
         }
     }
 }

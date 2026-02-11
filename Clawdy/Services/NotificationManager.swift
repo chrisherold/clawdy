@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import UserNotifications
 import UIKit
 
@@ -7,6 +8,7 @@ import UIKit
 @MainActor
 class NotificationManager: NSObject {
     static let shared = NotificationManager()
+    private let logger = Logger(subsystem: "com.clawdy", category: "notifications")
     
     // MARK: - Notification Categories & Actions
     
@@ -54,17 +56,17 @@ class NotificationManager: NSObject {
             await refreshAuthorizationStatus()
             
             if granted {
-                print("[NotificationManager] Notification permission granted")
+                logger.info("Notification permission granted")
                 
                 // Set up notification categories with actions
                 setupNotificationCategories()
             } else {
-                print("[NotificationManager] Notification permission denied")
+                logger.info("Notification permission denied")
             }
             
             return granted
         } catch {
-            print("[NotificationManager] Failed to request authorization: \(error)")
+            logger.error("Failed to request authorization: \(error.localizedDescription)")
             return false
         }
     }
@@ -98,7 +100,7 @@ class NotificationManager: NSObject {
         
         // Register the categories
         notificationCenter.setNotificationCategories([chatPushCategory])
-        print("[NotificationManager] Notification categories configured")
+        logger.debug("Notification categories configured")
     }
     
     // MARK: - Schedule Notifications
@@ -114,7 +116,7 @@ class NotificationManager: NSObject {
         }
         
         guard isAuthorized else {
-            print("[NotificationManager] Cannot schedule notification - not authorized")
+            logger.warning("Cannot schedule notification - not authorized")
             return
         }
         
@@ -141,9 +143,9 @@ class NotificationManager: NSObject {
         
         do {
             try await notificationCenter.add(request)
-            print("[NotificationManager] Scheduled chat push notification: \(messageId)")
+            logger.info("Scheduled chat push notification: \(messageId, privacy: .public)")
         } catch {
-            print("[NotificationManager] Failed to schedule notification: \(error)")
+            logger.error("Failed to schedule notification: \(error.localizedDescription)")
         }
     }
     
@@ -174,7 +176,7 @@ class NotificationManager: NSObject {
         }
         
         guard isAuthorized else {
-            print("[NotificationManager] Cannot schedule notification - not authorized")
+            logger.warning("Cannot schedule notification - not authorized")
             return .permissionDenied
         }
         
@@ -211,10 +213,10 @@ class NotificationManager: NSObject {
         
         do {
             try await notificationCenter.add(request)
-            print("[NotificationManager] Scheduled system notification")
+            logger.info("Scheduled system notification")
             return .success
         } catch {
-            print("[NotificationManager] Failed to schedule notification: \(error)")
+            logger.error("Failed to schedule notification: \(error.localizedDescription)")
             return .failed(error)
         }
     }
@@ -263,7 +265,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         if response.actionIdentifier == Self.replyAction,
            let textResponse = response as? UNTextInputNotificationResponse {
             let replyText = textResponse.userText
-            print("[NotificationManager] User replied: \(replyText)")
+            logger.info("User replied to notification")
             
             // Post notification for ViewModel to handle
             NotificationCenter.default.post(
@@ -276,7 +278,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         // Handle tap on notification (default action)
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
             if let messageId = userInfo["messageId"] as? String {
-                print("[NotificationManager] User tapped notification for message: \(messageId)")
+                logger.debug("User tapped notification for message: \(messageId, privacy: .public)")
                 // App will open and show the chat - no additional action needed
             }
         }

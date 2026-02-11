@@ -588,9 +588,9 @@ actor GatewayConnection {
             if eventName != "tick" {  // Skip tick spam
                 if let prettyData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]),
                    let prettyString = String(data: prettyData, encoding: .utf8) {
-                    print("[Gateway-\(role.rawValue)] ← RECV \(type):\n\(prettyString)")
+                    logger.debug("← RECV \(type, privacy: .public):\n\(prettyString, privacy: .public)")
                 } else {
-                    print("[Gateway-\(role.rawValue)] ← RECV \(type): \(json)")
+                    logger.debug("← RECV \(type, privacy: .public): \(String(describing: json), privacy: .public)")
                 }
             }
         }
@@ -788,7 +788,7 @@ actor GatewayConnection {
         if Self.verboseLogging && method != "connect" {
             if let prettyData = try? JSONSerialization.data(withJSONObject: frame, options: [.prettyPrinted, .sortedKeys]),
                let prettyString = String(data: prettyData, encoding: .utf8) {
-                print("[Gateway-\(role.rawValue)] → SEND \(method):\n\(prettyString)")
+                logger.debug("→ SEND \(method, privacy: .public):\n\(prettyString, privacy: .public)")
             }
         }
         
@@ -896,7 +896,7 @@ actor GatewayConnection {
             if method != "pong" {
                 if let prettyData = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),
                    let prettyString = String(data: prettyData, encoding: .utf8) {
-                    print("[Gateway-\(role.rawValue)] → SEND \(method):\n\(prettyString)")
+                    logger.debug("→ SEND \(method, privacy: .public):\n\(prettyString, privacy: .public)")
                 }
             }
         }

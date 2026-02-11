@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import UIKit
 
 /// Handles node capability invocations from the Clawdbot gateway.
@@ -19,6 +20,7 @@ import UIKit
 /// | system.notify   | Show a local notification            |
 @MainActor
 class NodeCapabilityHandler {
+    private let logger = Logger(subsystem: "com.clawdy", category: "node-capability")
     // MARK: - Capability Handler Types
     
     /// Handler for chat.push capability - appends agent messages to transcript.
@@ -57,7 +59,7 @@ class NodeCapabilityHandler {
     /// - Parameter request: The invoke request from the gateway
     /// - Returns: The invoke response to send back to the gateway
     func handleInvoke(_ request: BridgeInvokeRequest) async -> BridgeInvokeResponse {
-        print("[NodeCapabilityHandler] Handling invoke: \(request.command)")
+        logger.info("Handling invoke: \(request.command, privacy: .public)")
         
         // Check if app is in background (many capabilities require foreground)
         let isBackground = UIApplication.shared.applicationState == .background

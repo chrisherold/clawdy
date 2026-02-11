@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import OSLog
 import Photos
 import UIKit
 
@@ -7,6 +8,7 @@ import UIKit
 /// Manages action sheet display, photo library picker, and camera access.
 @MainActor
 class ImagePickerCoordinator: ObservableObject {
+    private let logger = Logger(subsystem: "com.clawdy", category: "image-picker")
     
     /// Whether to show the photo library picker
     @Published var showingPhotoPicker = false
@@ -96,7 +98,7 @@ class ImagePickerCoordinator: ObservableObject {
         // First check if camera is available
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
             // Camera not available (e.g., Simulator)
-            print("[ImagePickerCoordinator] Camera not available on this device")
+            logger.warning("Camera not available on this device")
             return
         }
         

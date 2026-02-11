@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import UIKit
 
 /// Notification posted when all image attachments are cleared (e.g., due to memory pressure).
@@ -11,6 +12,7 @@ extension Notification.Name {
 /// Images are stored as temp files and are NOT persisted across app launches.
 @MainActor
 class ImageAttachmentStore: ObservableObject {
+    private let logger = Logger(subsystem: "com.clawdy", category: "image-store")
     
     /// Shared singleton instance for app-wide access (memory pressure handling, etc.)
     static let shared = ImageAttachmentStore()
@@ -78,7 +80,7 @@ class ImageAttachmentStore: ObservableObject {
         // Store in memory
         attachments[id] = attachment
         
-        print("[ImageAttachmentStore] Added image: \(id), size: \(data.count) bytes, type: \(mediaType)")
+        logger.debug("Added image: \(id, privacy: .public), size: \(data.count) bytes, type: \(mediaType, privacy: .public)")
         
         return attachment
     }
@@ -126,7 +128,7 @@ class ImageAttachmentStore: ObservableObject {
             try? FileManager.default.removeItem(at: thumbnailURL)
         }
         
-        print("[ImageAttachmentStore] Removed image: \(id)")
+        logger.debug("Removed image: \(id, privacy: .public)")
     }
     
     /// Clear all attachments and delete all temp files.
@@ -155,7 +157,7 @@ class ImageAttachmentStore: ObservableObject {
             attributes: nil
         )
         
-        print("[ImageAttachmentStore] Cleared all \(count) images")
+        logger.info("Cleared all \(count) images")
         
         // Notify observers (e.g., ClawdyViewModel) to clear their pending images
         NotificationCenter.default.post(name: .imageAttachmentsCleared, object: nil)

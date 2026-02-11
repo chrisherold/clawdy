@@ -1,5 +1,8 @@
 import Foundation
 import AVFoundation
+import OSLog
+
+private let voiceLogger = Logger(subsystem: "com.clawdy", category: "voice-settings")
 
 /// TTS engine selection
 enum TTSEngine: String, Codable, CaseIterable {
@@ -140,7 +143,7 @@ class VoiceSettingsManager: ObservableObject {
         let voices = AVSpeechSynthesisVoice.speechVoices()
         
         // Log all voices for debugging
-        print("[VoiceSettings] All available voices:")
+        voiceLogger.info("All available voices:")
         for voice in voices.filter({ $0.language.starts(with: "en") }).sorted(by: { $0.identifier < $1.identifier }) {
             let qualityStr: String
             switch voice.quality {
@@ -148,7 +151,7 @@ class VoiceSettingsManager: ObservableObject {
             case .enhanced: qualityStr = "Enhanced"
             default: qualityStr = "Default"
             }
-            print("  [\(qualityStr)] \(voice.name) - \(voice.identifier)")
+            voiceLogger.info("  [\(qualityStr, privacy: .public)] \(voice.name, privacy: .public) - \(voice.identifier, privacy: .public)")
         }
 
         return voices

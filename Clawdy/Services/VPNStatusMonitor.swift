@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import OSLog
 import Combine
 
 /// VPN connection status
@@ -32,6 +33,7 @@ enum VPNStatus: Equatable {
 @MainActor
 class VPNStatusMonitor: ObservableObject {
     static let shared = VPNStatusMonitor()
+    private let logger = Logger(subsystem: "com.clawdy", category: "vpn-monitor")
 
     @Published private(set) var status: VPNStatus = .unknown
 
@@ -73,14 +75,14 @@ class VPNStatusMonitor: ObservableObject {
         }
         pathMonitor?.start(queue: monitorQueue)
 
-        print("[VPNStatusMonitor] Started monitoring")
+        logger.info("Started monitoring")
     }
 
     /// Stop monitoring network path changes
     func stopMonitoring() {
         pathMonitor?.cancel()
         pathMonitor = nil
-        print("[VPNStatusMonitor] Stopped monitoring")
+        logger.info("Stopped monitoring")
     }
 
     /// Manually trigger a status check
@@ -111,7 +113,7 @@ class VPNStatusMonitor: ObservableObject {
         guard path.status == .satisfied else {
             status = .disconnected
             if previousStatus != .disconnected {
-                print("[VPNStatusMonitor] No network connectivity")
+                logger.info("No network connectivity")
             }
             return
         }
@@ -128,7 +130,7 @@ class VPNStatusMonitor: ObservableObject {
                     let newStatus = VPNStatus.connected(interfaceName: formatInterfaceName(interface.name))
                     if status != newStatus {
                         status = newStatus
-                        print("[VPNStatusMonitor] VPN detected: \(interface.name)")
+                        logger.info("VPN detected: \(interface.name, privacy: .public)")
                     } else {
                         status = newStatus
                     }
@@ -142,7 +144,7 @@ class VPNStatusMonitor: ObservableObject {
                     let newStatus = VPNStatus.connected(interfaceName: formatInterfaceName(interface.name))
                     if status != newStatus {
                         status = newStatus
-                        print("[VPNStatusMonitor] VPN service detected: \(interface.name)")
+                        logger.info("VPN service detected: \(interface.name, privacy: .public)")
                     } else {
                         status = newStatus
                     }
@@ -153,7 +155,7 @@ class VPNStatusMonitor: ObservableObject {
 
         // No VPN interface found
         if status != .disconnected {
-            print("[VPNStatusMonitor] No VPN interface found. Interfaces: \(interfaces.map { $0.name })")
+            logger.debug("No VPN interface found. Interfaces: \(interfaces.map { $0.name }.joined(separator: ", "), privacy: .public)")
         }
         status = .disconnected
     }

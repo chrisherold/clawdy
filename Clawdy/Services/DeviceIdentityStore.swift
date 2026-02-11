@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OSLog
 import Security
 
 /// Represents a device's Ed25519 identity for gateway authentication.
@@ -26,6 +27,7 @@ public struct DeviceIdentity: Codable, Sendable {
 ///
 /// Private key is stored securely in iOS Keychain.
 public enum DeviceIdentityStore {
+    private static let logger = Logger(subsystem: "com.clawdy", category: "device-identity")
     private static let keychainKey = "com.clawdy.device-identity"
     private static var cachedIdentity: DeviceIdentity?
     
@@ -39,21 +41,21 @@ public enum DeviceIdentityStore {
         }
         switch load() {
         case .found(let existing):
-            print("[DeviceIdentityStore] Loaded existing device identity: \(existing.deviceId.prefix(8))...")
+            logger.info("Loaded existing device identity: \(existing.deviceId.prefix(8), privacy: .public)...")
             cachedIdentity = existing
             return existing
         case .notFound:
-            print("[DeviceIdentityStore] No existing identity found; generating new identity")
+            logger.info("No existing identity found; generating new identity")
             let identity = generate()
             save(identity)
             cachedIdentity = identity
             return identity
         case .failure(let status):
             if let cached = cachedIdentity {
-                print("[DeviceIdentityStore] Keychain error (\(status)); using cached identity")
+                logger.warning("Keychain error (\(status)); using cached identity")
                 return cached
             }
-            print("[DeviceIdentityStore] Keychain error (\(status)); returning ephemeral identity")
+            logger.warning("Keychain error (\(status)); returning ephemeral identity")
             return generateFallbackIdentity(status: status)
         }
     }
@@ -69,7 +71,7 @@ public enum DeviceIdentityStore {
             let signature = try privateKey.signature(for: Data(payload.utf8))
             return base64UrlEncode(signature)
         } catch {
-            print("[DeviceIdentityStore] Failed to sign payload: \(error)")
+            logger.error("Failed to sign payload: \(error.localizedDescription)")
             return nil
         }
     }
@@ -115,7 +117,7 @@ public enum DeviceIdentityStore {
 
     private static func generateFallbackIdentity(status: OSStatus) -> DeviceIdentity {
         let identity = generate()
-        print("[DeviceIdentityStore] Generated ephemeral identity due to keychain error \(status). Pairing may be required.")
+        logger.warning("Generated ephemeral identity due to keychain error \(status). Pairing may be required.")
         return identity
     }
     
@@ -137,15 +139,15 @@ public enum DeviceIdentityStore {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         
         if status == errSecItemNotFound {
-            print("[DeviceIdentityStore] Keychain identity not found")
+            logger.debug("Keychain identity not found")
             return .notFound
         }
         guard status == errSecSuccess else {
-            print("[DeviceIdentityStore] Keychain load failed: \(status)")
+            logger.error("Keychain load failed: \(status)")
             return .failure(status)
         }
         guard let data = result as? Data else {
-            print("[DeviceIdentityStore] Keychain load returned invalid data")
+            logger.error("Keychain load returned invalid data")
             return .failure(errSecInternalError)
         }
         
@@ -155,12 +157,12 @@ public enum DeviceIdentityStore {
             guard !identity.deviceId.isEmpty,
                   !identity.publicKey.isEmpty,
                   !identity.privateKey.isEmpty else {
-                print("[DeviceIdentityStore] Keychain identity missing required fields")
+                logger.error("Keychain identity missing required fields")
                 return .failure(errSecDecode)
             }
             return .found(identity)
         } catch {
-            print("[DeviceIdentityStore] Failed to decode identity: \(error)")
+            logger.error("Failed to decode identity: \(error.localizedDescription)")
             return .failure(errSecDecode)
         }
     }
@@ -186,10 +188,10 @@ public enum DeviceIdentityStore {
             
             let status = SecItemAdd(addQuery as CFDictionary, nil)
             if status != errSecSuccess {
-                print("[DeviceIdentityStore] Failed to save identity: \(status)")
+                logger.error("Failed to save identity: \(status)")
             }
         } catch {
-            print("[DeviceIdentityStore] Failed to encode identity: \(error)")
+            logger.error("Failed to encode identity: \(error.localizedDescription)")
         }
     }
     
