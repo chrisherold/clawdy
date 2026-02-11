@@ -1,0 +1,80 @@
+name: Clawdy
+options:
+  bundleIdPrefix: com.clawdypublic
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+
+packages:
+  KokoroSwift:
+    url: https://github.com/mlalma/kokoro-ios.git
+    from: "1.0.0"
+
+schemes:
+  Clawdy:
+    shared: true
+    build:
+      targets:
+        Clawdy: all
+
+targets:
+  Clawdy:
+    type: application
+    platform: iOS
+    sources:
+      - path: Clawdy
+        excludes:
+          - Preview Content
+      - path: Clawdy/Preview Content
+        buildPhase: none
+        type: folder
+    resources:
+      - path: Clawdy/Resources
+      - path: Clawdy/Assets.xcassets
+      - path: Clawdy/Preview Content/Preview Assets.xcassets
+    dependencies:
+      - package: KokoroSwift
+        embed: true
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: Clawdy/Clawdy.entitlements
+        CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: 1
+        DEVELOPMENT_TEAM: 489X42LS56
+        ENABLE_PREVIEWS: YES
+        MARKETING_VERSION: "1.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.clawdypublic.app
+        PRODUCT_NAME: Clawdy
+        TARGETED_DEVICE_FAMILY: 1
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    info:
+      path: Clawdy/Info.plist
+      properties:
+        CFBundleDisplayName: Clawdy
+        LSApplicationCategoryType: public.app-category.productivity
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIBackgroundModes:
+          - audio
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSMicrophoneUsageDescription: Clawdy needs microphone access to capture your voice commands.
+        NSSpeechRecognitionUsageDescription: Clawdy uses speech recognition to convert your voice to text commands.
+        NSFaceIDUsageDescription: Clawdy uses Face ID to protect access to your credentials and connection.
+        NSCameraUsageDescription: Clawdy needs camera access to take photos for sharing via voice commands.
+        NSPhotoLibraryUsageDescription: Clawdy needs access to your photo library to share images via voice commands.
+        NSRemindersUsageDescription: Clawdy needs access to your Reminders to read, create, and complete tasks by voice.
+        NSLocationWhenInUseUsageDescription: Clawdy uses your location to share it with Clawdbot when you request it.

@@ -74,11 +74,21 @@ If you see an authentication error when connecting:
 
 ## Building
 
-This app requires building for a physical iOS device (not Simulator) due to MLX/Metal dependencies in KokoroSwift.
+Prereqs:
+
+- Xcode (current stable)
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+
+Generate the Xcode project from `project.yml` and open it:
 
 ```bash
-xcodebuild -scheme Clawdy -destination 'generic/platform=iOS' build
+xcodegen generate
+open Clawdy.xcodeproj
 ```
+
+Then in Xcode, select a connected device and run. This app requires a physical iOS device (not Simulator) due to MLX/Metal dependencies in KokoroSwift.
+
+You may need to update `DEVELOPMENT_TEAM` in `project.yml` to your own Apple team ID for signing.
 
 ## License
 
