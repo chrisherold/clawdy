@@ -171,6 +171,7 @@ actor ElevenLabsTTSManager {
     func stop() {
         audioPlayer?.stop()
         audioPlayer = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
 

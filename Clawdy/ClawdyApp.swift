@@ -54,6 +54,9 @@ struct ClawdyApp: App {
         
         switch phase {
         case .background:
+            // Re-enable idle timer when backgrounded (screen lock doesn't matter in background)
+            UIApplication.shared.isIdleTimerDisabled = false
+
             // Handle Kokoro backgrounding first - stop GPU work to prevent crashes
             // GPU work from background is NOT allowed before iOS 26
             Task {
