@@ -378,11 +378,11 @@ class GatewayDualConnectionManager: ObservableObject {
         let sharedToken = credentials.authToken
         let deviceName = await MainActor.run { UIDevice.current.name }
         
-        // Create operator connection (uses node role for OpenClaw gateway compatibility)
+        // Create operator connection for chat operations
         let operatorOptions = GatewayConnectOptions.forOperator(displayName: deviceName)
         operatorConnection = GatewayConnection(
             url: url,
-            role: .node,
+            role: .operator,
             connectOptions: operatorOptions,
             sharedToken: sharedToken,
             autoReconnect: false
@@ -943,11 +943,11 @@ class GatewayDualConnectionManager: ObservableObject {
             throw GatewayError.connectionFailed("Invalid gateway URL")
         }
         
-        // Test with node role (OpenClaw gateway compatibility)
+        // Test with operator role (chat scopes)
         let testDisplayName = await MainActor.run { "\(UIDevice.current.name) (Test)" }
         let testOptions = GatewayConnectOptions(
-            role: "node",
-            scopes: [],
+            role: "operator",
+            scopes: ["operator.read", "operator.write"],
             caps: [],
             commands: [],
             permissions: [:],
@@ -958,7 +958,7 @@ class GatewayDualConnectionManager: ObservableObject {
 
         let testConnection = GatewayConnection(
             url: url,
-            role: .node,
+            role: .operator,
             connectOptions: testOptions,
             sharedToken: credentials.authToken,
             autoReconnect: false

@@ -140,14 +140,13 @@ public struct GatewayConnectOptions: Sendable {
     /// Create connection options for the operator role.
     ///
     /// Operator connections are used for chat operations (send/receive messages, history).
-    /// Note: Uses "node" role for compatibility with OpenClaw gateway which routes chat through nodes.
     ///
     /// - Parameter displayName: Optional custom display name for the client.
     /// - Returns: Pre-configured options for an operator connection.
     public static func forOperator(displayName: String? = nil) -> GatewayConnectOptions {
         GatewayConnectOptions(
-            role: "node",
-            scopes: [],
+            role: "operator",
+            scopes: ["operator.read", "operator.write"],
             caps: [],
             commands: [],
             permissions: [:],

@@ -2,40 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<key>CFBundleDisplayName</key>
-	<string>Clawdy</string>
-	<key>CFBundleExecutable</key>
-	<string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Clawdy needs microphone access to capture your voice commands.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Clawdy uses speech recognition to convert your voice to text commands.</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Clawdy uses Face ID to protect access to your credentials and connection.</string>
-	<key>NSRemindersUsageDescription</key>
-	<string>Clawdy needs access to your Reminders to read, create, and complete tasks by voice.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Clawdy needs access to your photo library to share images via voice commands.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Clawdy needs camera access to take photos for sharing via voice commands.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Clawdy uses your location to share it with Clawdbot when you request it.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -47,16 +13,5 @@
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
-	<key>UIRequiredDeviceCapabilities</key>
-	<array>
-		<string>armv7</string>
-		<string>microphone</string>
-	</array>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
 </dict>
 </plist>
